@@ -1,0 +1,30 @@
+{
+  "name": "wa-summarizer",
+  "version": "0.1.0",
+  "description": "Private, silent WhatsApp group summarizer (linked-device) with self-chat delivery and web dashboard",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "build": "tsc && mkdir -p dist/web/public && cp src/web/public/index.html dist/web/public/",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test tests/*.test.ts"
+  },
+  "dependencies": {
+    "baileys": "^7.0.0-rc13",
+    "better-sqlite3": "^12.4.1",
+    "pino": "^9.5.0",
+    "qrcode": "^1.5.4"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^22.10.0",
+    "@types/qrcode": "^1.5.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}
