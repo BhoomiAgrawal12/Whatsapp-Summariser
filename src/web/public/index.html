@@ -95,14 +95,23 @@ function digestHtml(content, citations) {
   return html;
 }
 
+/** Deep link handled by the companion Chrome extension on web.whatsapp.com. */
+function wwebJumpUrl(chatJid, waMessageId, chatName) {
+  const payload = encodeURIComponent(JSON.stringify({ jid: chatJid, id: waMessageId, name: chatName }));
+  return `https://web.whatsapp.com/#wasum=${payload}`;
+}
+
 function wireCitations(root) {
   root.querySelectorAll('a.cite').forEach((a) => a.addEventListener('click', async (e) => {
     e.preventDefault();
-    const { target, messages } = await api(`/api/context/${a.dataset.mid}?radius=15`);
-    $modalBox.innerHTML = `<h3>Message context</h3>` + messages.map((m) => `
+    const { target, chatName, messages } = await api(`/api/context/${a.dataset.mid}?radius=15`);
+    $modalBox.innerHTML = `<h3>Message context <span class="muted">· ${esc(chatName)}</span></h3>` + messages.map((m) => `
       <div class="msg ${m.id === target ? 'target' : ''}">
         <span class="who">${esc(m.senderName)}</span><span class="when">${fmt(m.timestamp)}${m.edited ? ' · edited' : ''}</span>
         <div>${esc(m.text || '(' + m.kind + ')')}</div>
+        ${m.id === target ? `<div style="margin-top:6px"><a class="ghost" target="_blank" rel="noopener"
+            href="${wwebJumpUrl(m.chatJid, m.waMessageId, chatName)}">Open in WhatsApp Web ↗</a>
+          <span class="muted" style="font-size:12px">(needs the companion extension)</span></div>` : ''}
       </div>`).join('');
     $modal.classList.add('open');
     $modalBox.querySelector('.target')?.scrollIntoView({ block: 'center' });
@@ -200,7 +209,9 @@ async function renderStarred() {
       <div class="starred-media">
         ${isImage ? `<img src="/${m.mediaPath}" alt="starred media">`
                   : m.mediaPath ? `<a class="ghost" href="/${m.mediaPath}" download>Download ${m.kind}</a>` : ''}
-      </div>`;
+      </div>
+      <div style="margin-top:8px"><a class="ghost" target="_blank" rel="noopener"
+        href="${wwebJumpUrl(m.chatJid, m.waMessageId, m.chatName)}">Open in WhatsApp Web ↗</a></div>`;
     $view.appendChild(div);
   }
 }

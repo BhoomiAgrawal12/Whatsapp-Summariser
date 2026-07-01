@@ -1,0 +1,30 @@
+/* Flash highlight on the located message row. */
+.wasum-flash {
+  outline: 3px solid #00a884 !important;
+  outline-offset: 2px;
+  border-radius: 8px;
+  transition: outline-color 1.5s ease;
+}
+.wasum-flash.wasum-fade {
+  outline-color: transparent !important;
+}
+
+/* Status toast shown while searching. */
+#wasum-toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  background: #111b21;
+  color: #e9edef;
+  border: 1px solid #00a884;
+  border-radius: 10px;
+  padding: 10px 18px;
+  font: 14px/1.4 system-ui, sans-serif;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.45);
+  max-width: 80vw;
+}
+#wasum-toast.wasum-error {
+  border-color: #f15c6d;
+}

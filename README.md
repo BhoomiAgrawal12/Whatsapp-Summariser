@@ -79,6 +79,28 @@ To open the dashboard from your phone, run with `DASHBOARD_HOST=0.0.0.0` underst
 that it is **unauthenticated** — only do this on a trusted home network
 (then visit `http://<laptop-ip>:8790`).
 
+## Chrome extension — exact jump-to-message (WhatsApp Web)
+
+WhatsApp has no public per-message deep links, so on phones citations open the
+dashboard's context view. On a laptop you can do better: the companion extension in
+`extension/` makes "Open in WhatsApp Web ↗" links (in the citation context modal and on
+starred messages) open web.whatsapp.com, switch to the right chat, **scroll back until
+the exact message loads, and flash-highlight it**.
+
+**Install (once):**
+1. Chrome/Edge/Brave → `chrome://extensions` → enable **Developer mode**
+2. **Load unpacked** → select the `extension/` folder
+3. Be logged in at https://web.whatsapp.com
+
+**How it works:** the dashboard link carries `#wasum=<chat + message id>` in the URL;
+the content script reads it, opens the chat via the sidebar search, and keeps scrolling
+up (lazy-loading older history) until the message row appears. A toast shows progress.
+
+**Caveats:** WhatsApp Web's DOM is unofficial and changes occasionally — if jumping
+stops working, the selectors at the top of `extension/content.js` are the place to fix.
+Very old messages beyond what WhatsApp Web keeps loaded can't be reached and the
+extension will say so.
+
 ## Configuration (`.env`)
 
 | Var | Default | Notes |
@@ -141,7 +163,7 @@ src/scheduler  daily digests
 ## Known limitations
 
 - No per-message deep links on phones (WhatsApp platform limit) — citations open full
-  context in the dashboard instead. Exact jump-to-message on WhatsApp *Web* would need
-  the optional Chrome extension (PLAN.md Phase 5, not built yet).
+  context in the dashboard instead. On a laptop, the bundled Chrome extension
+  (`extension/`) provides exact jump-to-message on WhatsApp Web.
 - History before the first pairing is only partially available (whatever WhatsApp syncs).
 - Unofficial protocol: a WhatsApp update can break the connection until Baileys ships a fix.

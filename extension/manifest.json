@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "WA Summarizer — Jump to Message",
+  "version": "0.1.0",
+  "description": "Companion for the WhatsApp Summarizer dashboard: opens WhatsApp Web and scrolls to the exact cited message.",
+  "content_scripts": [
+    {
+      "matches": ["https://web.whatsapp.com/*"],
+      "js": ["content.js"],
+      "css": ["content.css"],
+      "run_at": "document_idle"
+    }
+  ]
+}

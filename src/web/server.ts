@@ -123,8 +123,10 @@ async function route(deps: WebDeps, req: IncomingMessage, res: ServerResponse): 
       const messageId = Number(segments[2]);
       if (!Number.isInteger(messageId)) return json(res, 400, { error: 'bad message id' });
       const radius = Number(url.searchParams.get('radius') ?? '15');
+      const target = deps.messages.getById(messageId);
       return json(res, 200, {
         target: messageId,
+        chatName: target ? deps.messages.chatName(target.chatJid) : '',
         messages: deps.messages.context(messageId, Math.min(radius, 100)),
       });
     }

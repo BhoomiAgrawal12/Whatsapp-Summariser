@@ -54,7 +54,9 @@ src/
   web/server.ts     # dashboard HTTP API (node:http, no framework)
   web/public/index.html  # single-file PWA dashboard
   scheduler.ts      # daily digests per group
-tests/              # node:test — pure logic only (no network/WA mocking)
+tests/              # node:test — pure logic + summarizer integration (temp DB, fake LLM)
+extension/          # Chrome MV3 content script: jump-to-message on web.whatsapp.com
+                    # (plain JS, no build; dashboard links carry #wasum=<json> in the URL)
 ```
 
 ## Conventions (user-requested — keep these)
@@ -99,6 +101,8 @@ tests/              # node:test — pure logic only (no network/WA mocking)
 
 ## Status / roadmap
 
-Implemented: Phases 0–4 of PLAN.md (ingestion, storage, summarizer, self-chat commands,
-dashboard, star-archive, topics, scheduler). Not implemented: Chrome extension
-(exact jump-to-message), multi-tenant hardening (PLAN.md Phases 5–6).
+Implemented: Phases 0–5 of PLAN.md (ingestion, storage, summarizer, self-chat commands,
+dashboard, star-archive, topics, scheduler, jump-to-message Chrome extension).
+Not implemented: multi-tenant hardening (PLAN.md Phase 6).
+Extension caveat: web.whatsapp.com selectors are unofficial — kept in SELECTORS at the
+top of extension/content.js; that's the first place to look when jumping breaks.
