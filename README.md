@@ -125,7 +125,9 @@ node dist/index.js                          # foreground
 npx pm2 start dist/index.js --name wa-summarizer
 ```
 
-A Raspberry Pi / small VPS / always-on laptop all work.
+A Raspberry Pi / small VPS / always-on laptop all work. **For free 24/7 hosting on
+Oracle Cloud (Always Free tier), see [DEPLOY.md](./DEPLOY.md)** — includes one-command
+server setup and deploy scripts (`deploy/`).
 
 ## Development
 

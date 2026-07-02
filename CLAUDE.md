@@ -57,6 +57,10 @@ src/
 tests/              # node:test — pure logic + summarizer integration (temp DB, fake LLM)
 extension/          # Chrome MV3 content script: jump-to-message on web.whatsapp.com
                     # (plain JS, no build; dashboard links carry #wasum=<json> in the URL)
+deploy/             # Oracle Cloud deployment: oracle-setup.sh (server bootstrap),
+                    # deploy.sh (rsync push from laptop; --with-state moves auth/data/.env)
+                    # Walkthrough: DEPLOY.md. Rule: the WhatsApp session (auth/) must only
+                    # ever run in ONE place at a time.
 ```
 
 ## Conventions (user-requested — keep these)
