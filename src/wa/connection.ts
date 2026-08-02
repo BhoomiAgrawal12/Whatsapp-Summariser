@@ -1,10 +1,13 @@
 import makeWASocket, {
   DisconnectReason,
   downloadMediaMessage,
+  fetchLatestBaileysVersion,
+  fetchLatestWaWebVersion,
   jidNormalizedUser,
   useMultiFileAuthState,
   proto,
   type WAMessage,
+  type WAVersion,
 } from 'baileys';
 import type { Boom } from '@hapi/boom';
 import QRCode from 'qrcode';
@@ -38,14 +41,41 @@ export class WaConnection {
     private readonly handlers: WaHandlers
   ) {}
 
+  /**
+   * baileys ships a hardcoded WhatsApp-Web version that goes stale between
+   * releases. Once WhatsApp stops accepting it the handshake is rejected with
+   * statusCode 405 and the socket closes *before* a pairing QR is ever issued —
+   * so the symptom is "no QR", not an auth error. Always advertise a live
+   * version, preferring web.whatsapp.com itself, and only fall back to the
+   * bundled default if both lookups fail (e.g. offline).
+   */
+  private async resolveWaVersion(): Promise<WAVersion | undefined> {
+    for (const fetchVersion of [fetchLatestWaWebVersion, fetchLatestBaileysVersion]) {
+      try {
+        const { version } = await fetchVersion();
+        this.logger.info({ version, source: fetchVersion.name }, 'using WhatsApp Web version');
+        return version;
+      } catch (err) {
+        this.logger.warn({ err, source: fetchVersion.name }, 'WA version lookup failed');
+      }
+    }
+    this.logger.warn('falling back to the WA version bundled with baileys (may be rejected)');
+    return undefined;
+  }
+
   async start(): Promise<void> {
     const { state, saveCreds } = await useMultiFileAuthState(this.authDir);
+    const version = await this.resolveWaVersion();
     const sock = makeWASocket({
       auth: state,
+      ...(version ? { version } : {}),
       // Do not announce presence: keeps phone notifications intact and profile silent.
       markOnlineOnConnect: false,
       syncFullHistory: true,
-      logger: this.logger.child({ module: 'baileys', level: 'warn' }),
+      // pino only honours `level` as the SECOND argument; putting it inside the
+      // bindings object makes it a logged field and leaves the child at the
+      // parent's level, which buries the pairing QR under baileys' info chatter.
+      logger: this.logger.child({ module: 'baileys' }, { level: 'warn' }),
     });
     this.sock = sock;
 

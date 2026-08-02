@@ -14,6 +14,11 @@ see `PLAN.md`. Run/usage instructions: see `README.md`.
 - **baileys v7 (7.0.0-rc13)** — unofficial WhatsApp Web protocol lib. v7 notes:
   - No `printQRInTerminal` — handle `qr` from the `connection.update` event and render
     with the `qrcode` package.
+  - **Always pass an explicit `version`.** baileys hardcodes a WA-Web version
+    (`[2,3000,1035194821]` in rc13) that goes stale; once WhatsApp stops accepting it the
+    handshake dies with `statusCode 405` *before* any QR is issued, so it looks like
+    "QR not generating" rather than an auth error. `wa/connection.ts` resolves a live
+    version via `fetchLatestWaWebVersion()` → `fetchLatestBaileysVersion()` → bundled default.
   - After QR scan WhatsApp force-disconnects with `DisconnectReason.restartRequired` —
     recreate the socket (expected, not an error).
   - `useMultiFileAuthState('auth/')` persists creds; `creds.update` must call `saveCreds`.

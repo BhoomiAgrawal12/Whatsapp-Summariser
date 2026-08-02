@@ -17,7 +17,7 @@ phone, tablet and laptop. Nobody in any group ever sees anything.
 - 🤫 **Silent & personal** — no bot in the group, no read receipts, messages stay unread on your phone
 - 📱 **Works everywhere** — digests arrive in your own WhatsApp chat (all devices); dashboard in any browser
 - 🗓 **Any time window** — unread catch-up, `6h`/`2d`/`today`/`yesterday`, or exact date-time ranges
-- 🧵 **Topic digests** — overview, per-topic threads, decisions/action items, with `[n]` citations
+- 🧵 **Topic digests** — overview, per-topic threads, decisions/action items, with `vv[n]` citations
 - 🎯 **Personal topic profile** — "tech talks, event updates, sticker packs" → dedicated section per digest, changeable anytime
 - ⭐ **Permanent star archive** — react ⭐ to any message; it's copied (incl. media) into your own DB and survives chat clearing
 - 💾 **Saved summaries** — every digest is stored; citations link to full message context in the dashboard
@@ -153,7 +153,13 @@ src/scheduler  daily digests
 
 ## Troubleshooting
 
-- **QR never appears** — delete `auth/` and restart.
+- **QR never appears, log loops `connection closed, reconnecting` with `statusCode: 405`** —
+  WhatsApp is refusing the handshake because the advertised WhatsApp-Web version is stale,
+  so the socket closes before a pairing QR is ever issued. The app fetches a live version
+  at startup to prevent this; check the `using WhatsApp Web version` line on boot. If the
+  lookup failed (offline / blocked), you'll see `falling back to the WA version bundled
+  with baileys` — fix connectivity to `web.whatsapp.com` and restart.
+- **QR never appears, no 405** — delete `auth/` and restart.
 - **"logged out by WhatsApp"** — the device was unlinked (from the phone or by WhatsApp);
   delete `auth/` and re-pair.
 - **Group shows no messages** — the service only records messages received while running
