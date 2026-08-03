@@ -60,8 +60,13 @@ src/
   web/public/index.html  # single-file PWA dashboard
   scheduler.ts      # daily digests per group
 tests/              # node:test — pure logic + summarizer integration (temp DB, fake LLM)
-extension/          # Chrome MV3 content script: jump-to-message on web.whatsapp.com
-                    # (plain JS, no build; dashboard links carry #wasum=<json> in the URL)
+extension/          # Chrome MV3: jump-to-message on web.whatsapp.com (plain JS, no build)
+                    #   content.js — runs at document_start so the #wasum=<json> hash is
+                    #     captured before WhatsApp's own router can clear it
+                    #   popup.*    — toolbar status + manual "Test it" jump (diagnosability;
+                    #     a content-script-only extension has no visible UI at all)
+                    #   icons/     — generated PNGs; without `icons`+`action` the extension
+                    #     loads but is effectively invisible in Chrome
 deploy/             # Oracle Cloud deployment: oracle-setup.sh (server bootstrap),
                     # deploy.sh (rsync push from laptop; --with-state moves auth/data/.env)
                     # Walkthrough: DEPLOY.md. Rule: the WhatsApp session (auth/) must only
@@ -114,4 +119,6 @@ Implemented: Phases 0–5 of PLAN.md (ingestion, storage, summarizer, self-chat 
 dashboard, star-archive, topics, scheduler, jump-to-message Chrome extension).
 Not implemented: multi-tenant hardening (PLAN.md Phase 6).
 Extension caveat: web.whatsapp.com selectors are unofficial — kept in SELECTORS at the
-top of extension/content.js; that's the first place to look when jumping breaks.
+top of extension/content.js. Each entry is a LIST of fallback candidates tried in order,
+so when WhatsApp renames something, add a candidate rather than replacing one. That table
+is the first place to look when jumping breaks; the toolbar popup reports which step failed.

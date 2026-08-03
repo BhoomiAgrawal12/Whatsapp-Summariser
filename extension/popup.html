@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>WA Summarizer</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header>
+      <img src="icons/icon32.png" alt="" width="24" height="24" />
+      <div>
+        <h1>WA Summarizer</h1>
+        <p class="sub">Jump to message <span id="version"></span></p>
+      </div>
+    </header>
+
+    <section>
+      <h2>Status</h2>
+      <p id="tabStatus" class="pill">Checking…</p>
+    </section>
+
+    <section>
+      <h2>Last jump</h2>
+      <p id="lastJump" class="muted">Nothing yet — click a <code>[n]</code> citation in the
+        dashboard, then "Open in WhatsApp Web".</p>
+    </section>
+
+    <section>
+      <h2>Test it</h2>
+      <p class="muted">Paste an "Open in WhatsApp Web" link from the dashboard, or type a chat
+        name and message id, to check the extension end to end.</p>
+      <input id="link" type="text" placeholder="https://web.whatsapp.com/#wasum=… (or paste below)" />
+      <div class="row">
+        <input id="chat" type="text" placeholder="Chat name" />
+        <input id="mid" type="text" placeholder="Message id" />
+      </div>
+      <button id="go">Open WhatsApp Web &amp; jump</button>
+      <p id="err" class="err" hidden></p>
+    </section>
+
+    <footer>
+      <a id="dash" href="#">Open dashboard</a>
+      <a href="https://web.whatsapp.com/" id="waLink">Open WhatsApp Web</a>
+    </footer>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

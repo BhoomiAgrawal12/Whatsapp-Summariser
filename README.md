@@ -88,18 +88,35 @@ starred messages) open web.whatsapp.com, switch to the right chat, **scroll back
 the exact message loads, and flash-highlight it**.
 
 **Install (once):**
-1. Chrome/Edge/Brave → `chrome://extensions` → enable **Developer mode**
-2. **Load unpacked** → select the `extension/` folder
+1. Chrome/Edge/Brave → `chrome://extensions` → enable **Developer mode** (top-right toggle)
+2. **Load unpacked** → select the `extension/` folder itself
+   (the folder *containing* `manifest.json` — not the repo root, not `manifest.json`)
 3. Be logged in at https://web.whatsapp.com
+
+**Check it installed:** a green magnifier icon appears in the toolbar (click the puzzle-piece
+🧩 if Chrome collapsed it, then pin it). Clicking the icon opens a status popup that shows
+whether the current tab is WhatsApp Web and what the last jump did. The popup's **"Test it"**
+box takes a chat name + message id — or a pasted "Open in WhatsApp Web" link — and runs a
+jump directly, so you can verify the extension without waiting for a digest.
 
 **How it works:** the dashboard link carries `#wasum=<chat + message id>` in the URL;
 the content script reads it, opens the chat via the sidebar search, and keeps scrolling
-up (lazy-loading older history) until the message row appears. A toast shows progress.
+up (lazy-loading older history) until the message row appears. A toast shows progress,
+and the outcome is recorded for the popup.
 
 **Caveats:** WhatsApp Web's DOM is unofficial and changes occasionally — if jumping
-stops working, the selectors at the top of `extension/content.js` are the place to fix.
-Very old messages beyond what WhatsApp Web keeps loaded can't be reached and the
-extension will say so.
+stops working, the `SELECTORS` table at the top of `extension/content.js` is the place to
+fix (each entry is a list of fallback selectors, so add a new candidate rather than
+replacing). Very old messages beyond what WhatsApp Web keeps loaded can't be reached and
+the extension will say so.
+
+**Troubleshooting:**
+- *No icon at all after "Load unpacked"* — you almost certainly selected the wrong folder;
+  Chrome needs the one directly containing `manifest.json`.
+- *Icon there, nothing happens on click-through* — open the popup and read "Last jump".
+  "Not logged in" and "open in another tab — click Use Here" are reported explicitly.
+- *"Could not find the WhatsApp Web search box"* — WhatsApp changed its DOM; add a selector
+  to `SELECTORS.searchBox`.
 
 ## Configuration (`.env`)
 
