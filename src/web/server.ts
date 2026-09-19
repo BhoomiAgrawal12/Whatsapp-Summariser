@@ -8,6 +8,8 @@ import type { SettingsRepo } from '../store/settings.js';
 import type { StarredRepo } from '../store/starred.js';
 import type { SummaryRepo } from '../store/summaries.js';
 import type { Summarizer } from '../summarize/summarizer.js';
+import { parseWindowPhrase } from '../commands/parser.js';
+import { formatRange } from '../util/time.js';
 
 const MEDIA_MIME: Record<string, string> = {
   jpg: 'image/jpeg',
@@ -51,7 +53,12 @@ async function route(deps: WebDeps, req: IncomingMessage, res: ServerResponse): 
   const method = req.method ?? 'GET';
   const segments = url.pathname.split('/').filter(Boolean);
 
-  if (method === 'GET' && (url.pathname === '/' || url.pathname === '/index.html')) {
+  // "/m/<messageId>" is the deep link used by citation footers in WhatsApp
+  // digests. It serves the same single-page dashboard, which reads the path on
+  // boot and opens that message's context view.
+  const isDeepLink = method === 'GET' && segments[0] === 'm' && segments.length === 2;
+
+  if (method === 'GET' && (url.pathname === '/' || url.pathname === '/index.html' || isDeepLink)) {
     const htmlPath = fileURLToPath(new URL('./public/index.html', import.meta.url));
     const html = await readFile(htmlPath);
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
@@ -79,16 +86,25 @@ async function route(deps: WebDeps, req: IncomingMessage, res: ServerResponse): 
     }
 
     case 'POST summarize': {
-      const body = await readJson(req);
-      const { chatJid, fromTs, toTs } = body as { chatJid?: string; fromTs?: number; toTs?: number };
-      if (!chatJid || typeof fromTs !== 'number' || typeof toTs !== 'number' || fromTs > toTs) {
-        return json(res, 400, { error: 'expected { chatJid, fromTs, toTs }' });
-      }
-      const label = `${new Date(fromTs).toLocaleString()} → ${new Date(toTs).toLocaleString()}`;
-      const summary = await deps.summarizer.summarize(chatJid, { fromTs, toTs, label });
+      const body = (await readJson(req)) as {
+        chatJid?: string;
+        fromTs?: number;
+        toTs?: number;
+        /** Alternative to fromTs/toTs: any phrase /sum accepts ("yesterday", "2026-07-01..2026-07-03"). */
+        window?: string;
+      };
+      if (!body.chatJid) return json(res, 400, { error: 'expected { chatJid, ... }' });
+
+      const window = resolveWindow(body);
+      if (typeof window === 'string') return json(res, 400, { error: window });
+
+      const summary = await deps.summarizer.summarize(body.chatJid, window);
       return summary
         ? json(res, 200, summary)
-        : json(res, 200, { empty: true, message: 'No messages in that range.' });
+        : json(res, 200, {
+            empty: true,
+            message: `No messages in ${formatRange(window.fromTs, window.toTs)}.`,
+          });
     }
 
     case 'GET starred':
@@ -124,9 +140,11 @@ async function route(deps: WebDeps, req: IncomingMessage, res: ServerResponse): 
       if (!Number.isInteger(messageId)) return json(res, 400, { error: 'bad message id' });
       const radius = Number(url.searchParams.get('radius') ?? '15');
       const target = deps.messages.getById(messageId);
+      if (!target) return json(res, 404, { error: 'message not found' });
       return json(res, 200, {
         target: messageId,
-        chatName: target ? deps.messages.chatName(target.chatJid) : '',
+        chatJid: target.chatJid,
+        chatName: deps.messages.chatName(target.chatJid) || target.chatJid,
         messages: deps.messages.context(messageId, Math.min(radius, 100)),
       });
     }
@@ -134,6 +152,27 @@ async function route(deps: WebDeps, req: IncomingMessage, res: ServerResponse): 
     default:
       return json(res, 404, { error: 'not found' });
   }
+}
+
+/**
+ * Accept either an explicit millisecond range or a `window` phrase (the same
+ * grammar the /sum command uses), and always hand back a window carrying an
+ * unambiguous human label. Returns an error string when the input is unusable.
+ */
+function resolveWindow(body: { fromTs?: number; toTs?: number; window?: string }):
+  | { fromTs: number; toTs: number; label: string }
+  | string {
+  if (typeof body.window === 'string' && body.window.trim()) {
+    const parsed = parseWindowPhrase(body.window, Date.now());
+    return parsed ?? `Could not read "${body.window}" as a date window.`;
+  }
+  const { fromTs, toTs } = body;
+  if (typeof fromTs !== 'number' || typeof toTs !== 'number' || !Number.isFinite(fromTs) || !Number.isFinite(toTs)) {
+    return 'expected { chatJid, fromTs, toTs } or { chatJid, window }';
+  }
+  // Tolerate a reversed range rather than rejecting it — the picker makes it easy to swap.
+  const [from, to] = fromTs <= toTs ? [fromTs, toTs] : [toTs, fromTs];
+  return { fromTs: from, toTs: to, label: formatRange(from, to) };
 }
 
 async function serveMedia(deps: WebDeps, parts: string[], res: ServerResponse): Promise<void> {

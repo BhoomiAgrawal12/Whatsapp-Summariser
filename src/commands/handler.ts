@@ -4,10 +4,8 @@ import type { SettingsRepo } from '../store/settings.js';
 import type { SummaryRepo } from '../store/summaries.js';
 import type { Summarizer } from '../summarize/summarizer.js';
 import type { ChatInfo, SummaryWindow } from '../types.js';
-import { formatTs } from '../util/time.js';
+import { DAY_MS, formatRange, formatTs } from '../util/time.js';
 import { HELP_TEXT, parseCommand } from './parser.js';
-
-const DAY = 24 * 3_600_000;
 
 export interface CommandDeps {
   messages: MessageRepo;
@@ -40,10 +38,11 @@ export class CommandHandler {
           await sendToSelf(this.renderGroups());
           return;
         case 'sum': {
+          const now = Date.now();
           const window: SummaryWindow = command.window ?? {
-            fromTs: Date.now() - DAY,
-            toTs: Date.now(),
-            label: 'last 24h',
+            fromTs: now - DAY_MS,
+            toTs: now,
+            label: `last 24h (${formatRange(now - DAY_MS, now)})`,
           };
           await this.runSummary(command.group, window, true);
           return;
@@ -51,12 +50,15 @@ export class CommandHandler {
         case 'unread': {
           const group = this.resolveGroup(command.group);
           if (typeof group === 'string') return sendToSelf(group);
+          const now = Date.now();
           const since = this.deps.settings.getCatchupMarker(group.jid);
-          const fromTs = since > 0 ? since : Date.now() - DAY;
+          const fromTs = since > 0 ? since : now - DAY_MS;
           const window: SummaryWindow = {
             fromTs,
-            toTs: Date.now(),
-            label: since > 0 ? `since your last catch-up (${formatTs(since)})` : 'last 24h',
+            toTs: now,
+            label: since > 0
+              ? `since your last catch-up (${formatRange(fromTs, now)})`
+              : `last 24h (${formatRange(fromTs, now)})`,
           };
           await this.runSummaryFor(group, window, true);
           return;
@@ -138,7 +140,10 @@ export class CommandHandler {
     await sendToSelf(`⏳ Summarizing *${group.name}* (${window.label})…`);
     const summary = await summarizer.summarize(group.jid, window);
     if (!summary) {
-      await sendToSelf(`No messages in *${group.name}* for ${window.label}.`);
+      await sendToSelf(
+        `No messages in *${group.name}* for ${window.label}.\n` +
+          `_Searched ${formatRange(window.fromTs, window.toTs)}._`
+      );
       return;
     }
     if (advanceMarker) settings.setCatchupMarker(group.jid, window.toTs);

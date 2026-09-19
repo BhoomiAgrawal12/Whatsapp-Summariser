@@ -35,6 +35,10 @@
   .digest { white-space: pre-wrap; word-wrap: break-word; }
   .digest a.cite { color: var(--accent); text-decoration: none; font-weight: 600; }
   .digest a.cite:hover { text-decoration: underline; }
+  .digest a.jump { color: var(--muted); text-decoration: none; font-size: 12px; margin-left: 1px; }
+  .digest a.jump:hover { color: var(--accent); }
+  .presets button { font-size: 13px; }
+  label.muted { display: inline-flex; align-items: center; gap: 6px; }
   #modal { position: fixed; inset: 0; background: rgba(0,0,0,.65); display: none;
            align-items: center; justify-content: center; padding: 16px; z-index: 10; }
   #modal.open { display: flex; }
@@ -62,6 +66,15 @@
 <script>
 'use strict';
 const TABS = [['groups','Groups'],['summaries','Summaries'],['starred','Starred ⭐'],['settings','Topics & Schedules']];
+/** One-click windows — the value is a phrase the server parses (same grammar as /sum). */
+const PRESETS = [
+  ['today', 'Today'],
+  ['yesterday', 'Yesterday'],
+  ['24h', 'Last 24h'],
+  ['3d', 'Last 3 days'],
+  ['this week', 'This week'],
+  ['last week', 'Last week'],
+];
 let activeTab = 'groups';
 
 const $view = document.getElementById('view');
@@ -85,36 +98,71 @@ function renderTabs() {
     b.addEventListener('click', () => { activeTab = b.dataset.tab; render(); }));
 }
 
-/** Digest text -> HTML with *bold*, _italic_ and clickable [n] citations. */
-function digestHtml(content, citations) {
-  const byN = Object.fromEntries((citations || []).map((c) => [c.n, c.messageId]));
+/**
+ * Digest text -> HTML with *bold*, _italic_ and clickable [n] citations.
+ * Each citation gets two affordances: the number opens the in-dashboard context
+ * view, and the ↗ hands the exact message to the Chrome extension.
+ */
+function digestHtml(content, citations, chatName) {
+  const byN = Object.fromEntries((citations || []).map((c) => [String(c.n), c]));
   let html = esc(content);
   html = html.replace(/\*([^*\n]+)\*/g, '<b>$1</b>').replace(/_([^_\n]+)_/g, '<i>$1</i>');
-  html = html.replace(/\[(\d+)\]/g, (m, n) =>
-    byN[n] ? `<a href="#" class="cite" data-mid="${byN[n]}">[${n}]</a>` : m);
+  html = html.replace(/\[(\d+)\]/g, (m, n) => {
+    const c = byN[n];
+    if (!c) return m;
+    const jump = c.waMessageId
+      ? `<a class="jump" title="Open this exact message in WhatsApp Web" target="_blank" rel="noopener"
+           href="${wwebJumpUrl({ chatJid: c.chatJid, waMessageId: c.waMessageId, chatName,
+                                timestamp: c.timestamp, text: c.snippet, senderName: c.senderName })}">↗</a>`
+      : '';
+    return `<a href="#" class="cite" data-mid="${c.messageId}">[${n}]</a>${jump}`;
+  });
   return html;
 }
 
-/** Deep link handled by the companion Chrome extension on web.whatsapp.com. */
-function wwebJumpUrl(chatJid, waMessageId, chatName) {
-  const payload = encodeURIComponent(JSON.stringify({ jid: chatJid, id: waMessageId, name: chatName }));
+/**
+ * Deep link handled by the companion Chrome extension on web.whatsapp.com.
+ * The payload carries more than the id on purpose: `ts`/`text`/`sender` let the
+ * extension find the message through WhatsApp's own search (and verify it
+ * landed on the right one) when the id is not in the rendered DOM.
+ */
+function wwebJumpUrl(m) {
+  const payload = encodeURIComponent(JSON.stringify({
+    jid: m.chatJid || '',
+    id: m.waMessageId || '',
+    name: m.chatName || '',
+    ts: m.timestamp || 0,
+    text: (m.text || '').slice(0, 80),
+    sender: m.senderName || '',
+  }));
   return `https://web.whatsapp.com/#wasum=${payload}`;
+}
+
+/** Opens the context view for one message id. */
+async function showContext(messageId) {
+  const { target, chatName, messages } = await api(`/api/context/${messageId}?radius=15`);
+  $modalBox.innerHTML = `<h3>Message context <span class="muted">· ${esc(chatName)}</span></h3>` +
+    messages.map((m) => `
+      <div class="msg ${m.id === target ? 'target' : ''}">
+        <span class="who">${esc(m.senderName)}</span><span class="when">${fmt(m.timestamp)}${m.edited ? ' · edited' : ''}</span>
+        <div>${esc(m.text || '(' + m.kind + ')')}</div>
+        <div style="margin-top:6px"><a class="ghost" target="_blank" rel="noopener"
+            href="${wwebJumpUrl({ ...m, chatName })}">Open in WhatsApp Web ↗</a>
+          ${m.id === target ? '<span class="muted" style="font-size:12px">(needs the companion extension)</span>' : ''}</div>
+      </div>`).join('');
+  $modal.classList.add('open');
+  $modalBox.querySelector('.target')?.scrollIntoView({ block: 'center' });
 }
 
 function wireCitations(root) {
   root.querySelectorAll('a.cite').forEach((a) => a.addEventListener('click', async (e) => {
     e.preventDefault();
-    const { target, chatName, messages } = await api(`/api/context/${a.dataset.mid}?radius=15`);
-    $modalBox.innerHTML = `<h3>Message context <span class="muted">· ${esc(chatName)}</span></h3>` + messages.map((m) => `
-      <div class="msg ${m.id === target ? 'target' : ''}">
-        <span class="who">${esc(m.senderName)}</span><span class="when">${fmt(m.timestamp)}${m.edited ? ' · edited' : ''}</span>
-        <div>${esc(m.text || '(' + m.kind + ')')}</div>
-        ${m.id === target ? `<div style="margin-top:6px"><a class="ghost" target="_blank" rel="noopener"
-            href="${wwebJumpUrl(m.chatJid, m.waMessageId, chatName)}">Open in WhatsApp Web ↗</a>
-          <span class="muted" style="font-size:12px">(needs the companion extension)</span></div>` : ''}
-      </div>`).join('');
-    $modal.classList.add('open');
-    $modalBox.querySelector('.target')?.scrollIntoView({ block: 'center' });
+    try {
+      await showContext(a.dataset.mid);
+    } catch (err) {
+      $modalBox.innerHTML = `<h3>Message context</h3><div class="empty">❌ ${esc(err.message)}</div>`;
+      $modal.classList.add('open');
+    }
   }));
 }
 
@@ -124,7 +172,7 @@ function summaryCard(s) {
   div.innerHTML = `
     <h3>${esc(s.chatName)} <span class="muted">#${s.id}</span></h3>
     <div class="muted">${fmt(s.fromTs)} → ${fmt(s.toTs)} · ${s.messageCount} messages · created ${fmt(s.createdAt)}</div>
-    <div class="digest" style="margin-top:8px">${digestHtml(s.content, s.citations)}</div>`;
+    <div class="digest" style="margin-top:8px">${digestHtml(s.content, s.citations, s.chatName)}</div>`;
   wireCitations(div);
   return div;
 }
@@ -155,30 +203,63 @@ async function renderGroups() {
     div.innerHTML = `
       <h3>${esc(g.name || g.jid)}</h3>
       <div class="muted">${g.messageCount} messages · last ${fmt(g.lastMessageTs)}</div>
+      <div class="row presets">
+        ${PRESETS.map(([id, label]) => `<button class="ghost preset" data-window="${id}">${label}</button>`).join('')}
+      </div>
       <div class="row">
-        <input type="datetime-local" class="from"> <span class="muted">to</span>
-        <input type="datetime-local" class="to">
-        <button class="primary">Summarize</button>
+        <label class="muted">from <input type="date" class="from"></label>
+        <label class="muted">to <input type="date" class="to"></label>
+        <label class="muted"><input type="checkbox" class="precise"> exact times</label>
+        <button class="primary run">Summarize range</button>
         <span class="muted status"></span>
       </div>
       <div class="result"></div>`;
-    const [from, to] = [div.querySelector('.from'), div.querySelector('.to')];
+
+    const from = div.querySelector('.from');
+    const to = div.querySelector('.to');
+    const precise = div.querySelector('.precise');
     const status = div.querySelector('.status');
-    div.querySelector('button').addEventListener('click', async () => {
-      const fromTs = from.value ? new Date(from.value).getTime() : Date.now() - 86400000;
-      const toTs = to.value ? new Date(to.value).getTime() : Date.now();
-      status.innerHTML = '<span class="spin">⏳</span> summarizing…';
+    const result = div.querySelector('.result');
+
+    // "exact times" swaps the two date pickers for datetime pickers, keeping the
+    // day the user already chose. Dates alone cover the FULL days server-side.
+    precise.addEventListener('change', () => {
+      for (const input of [from, to]) {
+        const day = input.value ? input.value.slice(0, 10) : '';
+        input.type = precise.checked ? 'datetime-local' : 'date';
+        input.value = day ? (precise.checked ? `${day}T00:00` : day) : '';
+      }
+    });
+
+    const summarize = async (body, describe) => {
+      status.innerHTML = '<span class="spin">⏳</span> summarizing ' + describe + '…';
+      result.innerHTML = '';
       try {
         const s = await api('/api/summarize', {
           method: 'POST', headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ chatJid: g.jid, fromTs, toTs }),
+          body: JSON.stringify({ chatJid: g.jid, ...body }),
         });
         status.textContent = '';
-        const target = div.querySelector('.result');
-        target.innerHTML = '';
-        if (s.empty) { status.textContent = 'No messages in that range.'; return; }
-        target.appendChild(summaryCard(s));
+        if (s.empty) { status.textContent = s.message || 'No messages in that range.'; return; }
+        result.appendChild(summaryCard(s));
       } catch (err) { status.textContent = '❌ ' + err.message; }
+    };
+
+    div.querySelectorAll('.preset').forEach((b) =>
+      b.addEventListener('click', () => summarize({ window: b.dataset.window }, b.textContent)));
+
+    div.querySelector('.run').addEventListener('click', () => {
+      if (!from.value && !to.value) { status.textContent = 'Pick at least one date.'; return; }
+      // A date-only range is sent as a phrase so the server expands it to whole
+      // days; mixing in a time switches to explicit millisecond bounds.
+      if (!precise.checked) {
+        const a = from.value || to.value;
+        const b = to.value || from.value;
+        return summarize({ window: `${a}..${b}` }, `${a} → ${b}`);
+      }
+      const fromTs = new Date(from.value || to.value).getTime();
+      const toTs = new Date(to.value || from.value).getTime();
+      return summarize({ fromTs, toTs }, 'that range');
     });
     $view.appendChild(div);
   }
@@ -211,7 +292,7 @@ async function renderStarred() {
                   : m.mediaPath ? `<a class="ghost" href="/${m.mediaPath}" download>Download ${m.kind}</a>` : ''}
       </div>
       <div style="margin-top:8px"><a class="ghost" target="_blank" rel="noopener"
-        href="${wwebJumpUrl(m.chatJid, m.waMessageId, m.chatName)}">Open in WhatsApp Web ↗</a></div>`;
+        href="${wwebJumpUrl(m)}">Open in WhatsApp Web ↗</a></div>`;
     $view.appendChild(div);
   }
 }
@@ -264,7 +345,22 @@ async function renderSettings() {
   $view.appendChild(sched);
 }
 
-render();
+/**
+ * "/m/<messageId>" — the link citations carry into WhatsApp. Open that message's
+ * context straight away, on top of whichever tab was last active.
+ */
+async function openDeepLink() {
+  const match = /^\/m\/(\d+)\/?$/.exec(location.pathname);
+  if (!match) return;
+  try {
+    await showContext(match[1]);
+  } catch (err) {
+    $modalBox.innerHTML = `<h3>Message context</h3><div class="empty">❌ ${esc(err.message)}</div>`;
+    $modal.classList.add('open');
+  }
+}
+
+render().then(openDeepLink);
 </script>
 </body>
 </html>

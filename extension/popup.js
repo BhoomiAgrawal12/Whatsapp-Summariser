@@ -12,12 +12,24 @@ const DASHBOARD_URL = 'http://127.0.0.1:8790';
 
 const $ = (id) => document.getElementById(id);
 
-function jumpUrl(chatName, messageId) {
-  const payload = encodeURIComponent(JSON.stringify({ jid: '', id: messageId, name: chatName }));
+/**
+ * Build a jump link. `extra` carries whatever a pasted dashboard link supplied
+ * (timestamp, text snippet, sender) — the content script uses those to find the
+ * message via WhatsApp's own search when the id is not already in the DOM.
+ */
+function jumpUrl(chatName, messageId, extra = {}) {
+  const payload = encodeURIComponent(JSON.stringify({
+    jid: extra.jid ?? '',
+    id: messageId,
+    name: chatName,
+    ts: extra.ts ?? 0,
+    text: extra.text ?? '',
+    sender: extra.sender ?? '',
+  }));
   return `${WA_ORIGIN}${HASH_PREFIX}${payload}`;
 }
 
-/** Pulls {name, id} back out of a dashboard "Open in WhatsApp Web" link. */
+/** Pulls the full target back out of a dashboard "Open in WhatsApp Web" link. */
 function parseLink(raw) {
   const at = raw.indexOf(HASH_PREFIX);
   if (at === -1) return null;
@@ -47,7 +59,8 @@ function showLastJump(lastJump) {
   const when = new Date(lastJump.at).toLocaleString();
   const el = $('lastJump');
   el.className = 'pill ' + (lastJump.ok ? 'ok' : 'warn');
-  el.textContent = `${lastJump.ok ? '✓' : '✕'} ${lastJump.message}` +
+  const how = lastJump.via ? ` [via ${lastJump.via}]` : '';
+  el.textContent = `${lastJump.ok ? '✓' : '✕'} ${lastJump.message}${how}` +
     (lastJump.chatName ? ` — "${lastJump.chatName}"` : '') + ` · ${when}`;
 }
 
@@ -99,7 +112,7 @@ async function main() {
       err.hidden = false;
       return;
     }
-    await chrome.tabs.create({ url: jumpUrl(chatName, messageId) });
+    await chrome.tabs.create({ url: jumpUrl(chatName, messageId, pasted ?? {}) });
     window.close();
   });
 }

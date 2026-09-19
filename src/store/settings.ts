@@ -1,5 +1,6 @@
 import type { Db } from './db.js';
 import type { ScheduleEntry, TopicProfile } from '../types.js';
+import { dayKey, dayStart } from '../util/time.js';
 
 /**
  * Key-value store for small app state:
@@ -50,9 +51,34 @@ export class SettingsRepo {
     return raw ? (JSON.parse(raw) as ScheduleEntry[]) : [];
   }
 
-  setSchedule(chatJid: string, time: string | null): void {
+  /**
+   * Local day ("YYYY-MM-DD") on which a chat's daily digest last fired.
+   * Persisted rather than kept in memory so a restart cannot re-send a digest
+   * that already went out today.
+   */
+  getLastDigestDay(chatJid: string): string | null {
+    return this.get(`digest_day:${chatJid}`);
+  }
+
+  setLastDigestDay(chatJid: string, day: string): void {
+    this.set(`digest_day:${chatJid}`, day);
+  }
+
+  /**
+   * Set (or, with `time === null`, clear) a chat's daily digest time.
+   *
+   * If the new time has already passed today, today is marked as "already
+   * fired" so scheduling "20:00" at 21:00 waits for tomorrow instead of firing
+   * a digest the moment the next tick runs.
+   */
+  setSchedule(chatJid: string, time: string | null, now: number = Date.now()): void {
     const schedules = this.getSchedules().filter((s) => s.chatJid !== chatJid);
-    if (time !== null) schedules.push({ chatJid, time });
+    if (time !== null) {
+      schedules.push({ chatJid, time });
+      const [hours, minutes] = time.split(':').map(Number);
+      const dueAt = dayStart(now) + (hours ?? 0) * 3_600_000 + (minutes ?? 0) * 60_000;
+      if (now >= dueAt) this.setLastDigestDay(chatJid, dayKey(now));
+    }
     this.set('schedules', JSON.stringify(schedules));
   }
 }

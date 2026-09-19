@@ -11,6 +11,12 @@ export interface AppConfig {
   dashboardPort: number;
   /** 127.0.0.1 by default; 0.0.0.0 exposes the (unauthenticated) dashboard on the LAN. */
   dashboardHost: string;
+  /**
+   * Base URL the dashboard is reachable at *from the user's phone*, e.g.
+   * "http://192.168.1.20:8790". Citation footers in WhatsApp-delivered digests
+   * link to `<publicUrl>/m/<messageId>`; empty disables those links.
+   */
+  publicUrl: string;
   dataDir: string;
   authDir: string;
   logLevel: string;
@@ -53,6 +59,7 @@ export function loadConfig(cwd: string = process.cwd()): AppConfig {
     ollamaModel: env('OLLAMA_MODEL', 'llama3.1:8b'),
     dashboardPort: Number(env('DASHBOARD_PORT', '8790')),
     dashboardHost: env('DASHBOARD_HOST', '127.0.0.1'),
+    publicUrl: env('PUBLIC_URL', '').replace(/\/+$/, ''),
     dataDir: path.resolve(cwd, env('DATA_DIR', './data')),
     authDir: path.resolve(cwd, 'auth'),
     logLevel: env('LOG_LEVEL', 'info'),

@@ -55,12 +55,16 @@ src/
   llm/              # provider.ts (interface+factory), openai.ts, ollama.ts
   summarize/        # chunk.ts (pure, tested), prompts.ts, summarizer.ts
   commands/         # parser.ts (pure, tested), handler.ts (self-chat commands + delivery)
-  util/time.ts      # timestamp formatting/parsing (local time)
+  util/time.ts      # the ONLY place ms-UTC <-> local dates convert: formatting,
+                    #   day/week/month boundaries, and a tolerant date parser
+                    #   (YYYY-MM-DD, DD/MM/YYYY, "1 Jul", +optional HH:MM / am-pm)
   web/server.ts     # dashboard HTTP API (node:http, no framework)
   web/public/index.html  # single-file PWA dashboard
   scheduler.ts      # daily digests per group
 tests/              # node:test — pure logic + summarizer integration (temp DB, fake LLM)
 extension/          # Chrome MV3: jump-to-message on web.whatsapp.com (plain JS, no build)
+                    #   background.js — reuses an ALREADY-OPEN WhatsApp tab (a second tab
+                    #     parks on "open in another window" and never loads)
                     #   content.js — runs at document_start so the #wasum=<json> hash is
                     #     captured before WhatsApp's own router can clear it
                     #   popup.*    — toolbar status + manual "Test it" jump (diagnosability;
@@ -97,10 +101,25 @@ deploy/             # Oracle Cloud deployment: oracle-setup.sh (server bootstrap
 - **Star-to-archive:** a ⭐ (or any star-emoji) reaction *by the user* on any message
   copies it (+ downloaded media) into `starred_archive` — survives WhatsApp chat clears.
 - **No per-message deep links** exist on WhatsApp mobile — digests cite messages as
-  `sender HH:MM`; the dashboard expands full context around any cited message. Exact
-  jump-to-message would need the future Chrome-extension add-on (PLAN.md Phase 5).
-- **Summaries cite messages via `[n]` indices** mapped back to DB message ids
-  (`summarize/summarizer.ts`), enabling dashboard context links.
+  `sender HH:MM`, plus a `<PUBLIC_URL>/m/<id>` link when `PUBLIC_URL` is set, which opens
+  the dashboard's context view for that exact message.
+- **Summaries cite messages via `[n]` indices** mapped back in `summarize/summarizer.ts` to
+  a full `CitationRef` (db id + chat jid + wa message id + timestamp + sender + snippet).
+  The extra identity is what lets the dashboard and the extension resolve a citation to the
+  *exact* WhatsApp message; older stored summaries have only `{n, messageId}`, so every
+  reader must treat the rest as optional.
+- **Date-wise summaries:** when a window's messages straddle more than one local day, the
+  transcript is grouped under `=== <weekday> <date> ===` headings and the prompt asks for a
+  day-by-day digest. Chunking re-states the heading at the top of any chunk that would
+  otherwise start mid-day.
+- **Window grammar lives in `commands/parser.ts::parseWindowPhrase`** and is shared by the
+  `/sum` command and `POST /api/summarize` (`{ window: "yesterday" }`). A bare date means
+  that whole calendar day; a range's ends expand to full days unless a time is given. An
+  unparseable but date-shaped token is reported as an error rather than folded into the
+  group name — that silent fallback is what made date-wise summaries look broken.
+- **Scheduler fires on "due and not yet sent today"**, not on an exact-minute match, and the
+  marker is persisted in `settings` — an exact-minute match skipped the whole day whenever a
+  tick was late, and an in-memory marker re-sent digests after a restart.
 - **DB ids:** messages keyed by `(chat_jid, wa_message_id)`; timestamps stored as unix
   ms integers, UTC.
 - Auth state lives in `auth/` (gitignored, per-account secret). Wiping it = re-pair QR.
@@ -108,7 +127,12 @@ deploy/             # Oracle Cloud deployment: oracle-setup.sh (server bootstrap
 
 ## Testing
 
-- Unit tests cover pure logic: chunking, command parsing, message extraction.
+- Unit tests cover pure logic: chunking, command parsing (incl. the whole date-window
+  grammar), message extraction, and the scheduler's due/fired decisions.
+- `tests/summarizer.test.ts` runs the real summarizer against a temp SQLite DB and a fake
+  LLM provider — it asserts citation identity and the day-wise transcript layout.
+- The extension has no test runner; its pure helpers (data-id matching, `data-pre-plain-text`
+  timestamp parsing, title normalization) are written to be checkable in isolation.
 - WhatsApp connectivity can only be truly tested by pairing a real account (QR) —
   see README "First run". There is no mock of the WA socket; keep side-effectful code
   thin and push logic into pure, tested modules.
@@ -120,5 +144,9 @@ dashboard, star-archive, topics, scheduler, jump-to-message Chrome extension).
 Not implemented: multi-tenant hardening (PLAN.md Phase 6).
 Extension caveat: web.whatsapp.com selectors are unofficial — kept in SELECTORS at the
 top of extension/content.js. Each entry is a LIST of fallback candidates tried in order,
-so when WhatsApp renames something, add a candidate rather than replacing one. That table
-is the first place to look when jumping breaks; the toolbar popup reports which step failed.
+so when WhatsApp renames something, add a candidate rather than replacing one. Use
+`pick`/`pickAll`, never `SELECTORS.x[0]` — indexing the first candidate directly defeats
+the fallback list. That table is the first place to look when jumping breaks; the toolbar
+popup reports which step failed and which strategy (dom/search/scroll/nearest) succeeded.
+Locating a message tries WhatsApp's OWN search before scrolling: search reaches history far
+outside the loaded window and WhatsApp performs the exact jump itself.

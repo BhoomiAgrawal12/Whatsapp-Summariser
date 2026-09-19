@@ -25,7 +25,9 @@ async function main(): Promise<void> {
   const settings = new SettingsRepo(db);
 
   const provider = createProvider(config);
-  const summarizer = new Summarizer(provider, messages, summaries, settings, logger);
+  const summarizer = new Summarizer(provider, messages, summaries, settings, logger, {
+    publicUrl: config.publicUrl,
+  });
 
   // sendToSelf is late-bound: the connection is constructed after the handlers.
   const sendToSelf = async (text: string): Promise<void> => conn.sendToSelf(text);
