@@ -65,6 +65,16 @@
   .msg.target .open-wa { color: var(--accent); border: 1px solid var(--accent); }
   .starred-media img { max-width: 100%; border-radius: 10px; margin-top: 8px; }
   .empty { text-align: center; color: var(--muted); padding: 40px 0; }
+  /* Sticky filter bar shared by every list tab. Sits under the header, which is
+     itself sticky at 0, so it is offset by the header's height. */
+  .toolbar { position: sticky; top: 52px; z-index: 4; display: flex; gap: 8px; flex-wrap: wrap;
+             align-items: center; background: var(--bg); padding: 10px 0 12px; }
+  .toolbar input[type="search"] { flex: 1 1 220px; min-width: 0; }
+  .toolbar select { background: var(--panel2); border: 1px solid #33434e; color: var(--text);
+                    border-radius: 8px; padding: 8px 10px; font: inherit; }
+  .toolbar .count { flex-basis: 100%; }
+  input[type="search"]::-webkit-search-cancel-button { filter: invert(0.6); }
+  mark { background: var(--accent2); color: var(--text); border-radius: 3px; padding: 0 2px; }
   .spin { display: inline-block; animation: r 1s linear infinite; }
   @keyframes r { to { transform: rotate(360deg); } }
 </style>
@@ -193,6 +203,151 @@ function summaryCard(s) {
   return div;
 }
 
+/** Cap on cards rendered at once — hundreds of chats would otherwise crawl. */
+const LIST_LIMIT = 40;
+
+/**
+ * Normalize text for searching — lowercase, accents folded, zero-width marks
+ * dropped, whitespace collapsed — while recording which source index each
+ * normalized character came from.
+ *
+ * The map matters: normalization changes length, so an offset found in the
+ * normalized string cannot be used to slice the original. Without it,
+ * highlighting a match in a name containing a zero-width character or a double
+ * space marks the wrong characters.
+ */
+function normalizeWithMap(text) {
+  const source = text || '';
+  let out = '';
+  const map = [];
+  let lastWasSpace = true; // leading whitespace is dropped, like trim()
+
+  for (let i = 0; i < source.length; i++) {
+    const folded = source[i]
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[̀-ͯ​-‏⁠﻿]/g, '');
+    if (!folded) continue;
+
+    if (/^\s+$/.test(folded)) {
+      if (lastWasSpace) continue;
+      out += ' ';
+      map.push(i);
+      lastWasSpace = true;
+      continue;
+    }
+    lastWasSpace = false;
+    for (const ch of folded) {
+      out += ch;
+      map.push(i);
+    }
+  }
+  while (out.endsWith(' ')) {
+    out = out.slice(0, -1);
+    map.pop();
+  }
+  return { text: out, map };
+}
+
+/** Search text compared with case, accents and emoji noise removed. */
+function normalizeQuery(text) {
+  return normalizeWithMap(text).text;
+}
+
+/** Search query per tab, so switching tabs and back doesn't lose it. */
+const filterState = {};
+
+/**
+ * Render a searchable, optionally sortable list into the main view.
+ *
+ * Every list tab uses this so search behaves identically everywhere, and so a
+ * large account (hundreds of groups) stays responsive: only LIST_LIMIT cards are
+ * built at a time, and the count says plainly when results are being held back.
+ *
+ * @param {object}   o
+ * @param {Array}    o.items        rows to show
+ * @param {string}   o.key          filterState key (usually the tab id)
+ * @param {string}   o.placeholder  search box placeholder
+ * @param {Array}    [o.sorts]      [id, label, comparator][] — first is the default
+ * @param {Function} o.searchText   item -> the string to match against
+ * @param {Function} o.renderItem   item -> HTMLElement
+ * @param {string}   o.emptyText    shown when there are no items at all
+ * @param {string}   o.noun         plural noun for the count ("groups", "summaries")
+ */
+function filterableList(o) {
+  $view.innerHTML = '';
+  if (!o.items.length) {
+    $view.innerHTML = `<div class="empty">${esc(o.emptyText)}</div>`;
+    return;
+  }
+
+  const sorts = o.sorts || [];
+  const state = (filterState[o.key] = filterState[o.key] || { query: '', sort: sorts[0]?.[0] || '' });
+
+  const bar = document.createElement('div');
+  bar.className = 'toolbar';
+  bar.innerHTML = `
+    <input type="search" class="search" placeholder="${esc(o.placeholder)}" value="${esc(state.query)}" autocomplete="off">
+    ${sorts.length ? `<select class="sort" title="Sort order">${sorts
+      .map(([id, label]) => `<option value="${esc(id)}"${id === state.sort ? ' selected' : ''}>${esc(label)}</option>`)
+      .join('')}</select>` : ''}
+    <span class="muted count"></span>`;
+
+  const list = document.createElement('div');
+  $view.append(bar, list);
+
+  const $search = bar.querySelector('.search');
+  const $sort = bar.querySelector('.sort');
+  const $count = bar.querySelector('.count');
+
+  const apply = () => {
+    state.query = $search.value;
+    if ($sort) state.sort = $sort.value;
+
+    const needle = normalizeQuery(state.query);
+    const matched = needle
+      ? o.items.filter((item) => normalizeQuery(o.searchText(item)).includes(needle))
+      : o.items.slice();
+
+    const comparator = sorts.find(([id]) => id === state.sort)?.[2];
+    if (comparator) matched.sort(comparator);
+
+    const shown = matched.slice(0, LIST_LIMIT);
+    list.innerHTML = '';
+    for (const item of shown) list.appendChild(o.renderItem(item, needle));
+
+    if (matched.length === 0) {
+      list.innerHTML = `<div class="empty">Nothing matches “${esc(state.query.trim())}”.</div>`;
+      $count.textContent = '';
+    } else if (matched.length > shown.length) {
+      // Never silently truncate: say what is being held back and why.
+      $count.textContent = `showing ${shown.length} of ${matched.length} ${o.noun} — search to narrow it down`;
+    } else {
+      $count.textContent = `${matched.length} ${o.noun}`;
+    }
+  };
+
+  $search.addEventListener('input', apply);
+  $sort?.addEventListener('change', apply);
+  apply();
+}
+
+/**
+ * Wrap the first match of an already-normalized `needle` in <mark>.
+ * Escapes first, then maps the match position back through normalization, so
+ * the marked characters are the ones that actually matched.
+ */
+function highlight(text, needle) {
+  const safe = esc(text);
+  if (!needle) return safe;
+  const { text: normalized, map } = normalizeWithMap(safe);
+  const at = normalized.indexOf(needle);
+  if (at === -1) return safe;
+  const start = map[at] ?? 0;
+  const end = at + needle.length < map.length ? map[at + needle.length] : safe.length;
+  return `${safe.slice(0, start)}<mark>${safe.slice(start, end)}</mark>${safe.slice(end)}`;
+}
+
 async function render() {
   renderTabs();
   $view.innerHTML = '<div class="empty"><span class="spin">⏳</span> loading…</div>';
@@ -208,16 +363,28 @@ async function render() {
 
 async function renderGroups() {
   const groups = await api('/api/groups');
-  $view.innerHTML = '';
-  if (!groups.length) {
-    $view.innerHTML = '<div class="empty">No groups recorded yet — they appear as messages arrive after pairing.</div>';
-    return;
-  }
-  for (const g of groups) {
+  filterableList({
+    items: groups,
+    key: 'groups',
+    placeholder: 'Search groups by name…',
+    noun: 'groups',
+    emptyText: 'No groups recorded yet — they appear as messages arrive after pairing.',
+    searchText: (g) => g.name || g.jid,
+    sorts: [
+      ['recent', 'Most recent activity', (a, b) => (b.lastMessageTs || 0) - (a.lastMessageTs || 0)],
+      ['name', 'Name (A–Z)', (a, b) => (a.name || a.jid).localeCompare(b.name || b.jid)],
+      ['messages', 'Most messages', (a, b) => b.messageCount - a.messageCount],
+    ],
+    renderItem: (g, needle) => groupCard(g, needle),
+  });
+}
+
+function groupCard(g, needle) {
+  {
     const div = document.createElement('div');
     div.className = 'card';
     div.innerHTML = `
-      <h3>${esc(g.name || g.jid)}</h3>
+      <h3>${highlight(g.name || g.jid, needle)}</h3>
       <div class="muted">${g.messageCount} messages · last ${fmt(g.lastMessageTs)}</div>
       <div class="row presets">
         ${PRESETS.map(([id, label]) => `<button class="ghost preset" data-window="${id}">${label}</button>`).join('')}
@@ -277,7 +444,7 @@ async function renderGroups() {
       const toTs = new Date(to.value || from.value).getTime();
       return summarize({ fromTs, toTs }, 'that range');
     });
-    $view.appendChild(div);
+    return div;
   }
 }
 
