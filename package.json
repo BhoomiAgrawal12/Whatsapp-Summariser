@@ -11,7 +11,7 @@
     "dev": "tsx src/index.ts",
     "build": "tsc && mkdir -p dist/web/public && cp src/web/public/index.html dist/web/public/",
     "start": "node dist/index.js",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.tests.json",
     "check-env": "tsx scripts/check-env.ts",
     "test": "tsx --test tests/*.test.ts"
   },

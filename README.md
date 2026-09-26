@@ -225,7 +225,7 @@ server setup and deploy scripts (`deploy/`).
 ## Development
 
 ```bash
-npm run typecheck   # strict TS, no `any`
+npm run typecheck   # strict TS, no `any` — covers src, tests and scripts
 npm test            # 64 unit + integration tests (node:test)
 npm run build       # compile to dist/
 npm run check-env   # config doctor — see below

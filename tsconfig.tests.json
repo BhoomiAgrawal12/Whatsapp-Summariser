@@ -1,0 +1,15 @@
+{
+  // Type-checks the code that tsconfig.json cannot: tests and scripts live
+  // outside `rootDir: src`, so the build config excludes them and they were
+  // never checked at all — a test could call a repository with the wrong
+  // arguments and only fail at runtime, against a real SQLite constraint.
+  // Checked separately (noEmit) rather than widening the build's rootDir,
+  // which would change the shape of dist/.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": "."
+  },
+  "include": ["src/**/*", "tests/**/*", "scripts/**/*"],
+  "exclude": ["node_modules", "dist"]
+}
