@@ -68,7 +68,14 @@
       '#pane-side div[role="row"]',
       '#side div[role="listitem"]',
     ],
-    chatHeaderTitle: ['#main header span[title]', '#main header div[role="button"] span'],
+    // Several of these match at once; `currentChatTitles` reads them ALL,
+    // because the chat name is not reliably the first one in the header.
+    chatHeaderTitle: [
+      '#main header span[title]',
+      '#main header [data-testid="conversation-info-header-chat-title"]',
+      '#main header h1, #main header h2',
+      '#main header div[role="button"] span',
+    ],
     messageRow: ['#main div[data-id]', '#main [data-id]'],
     /** Carries "[HH:MM, DD/MM/YYYY] Sender: " — our only per-row timestamp. */
     rowMeta: ['[data-pre-plain-text]'],
@@ -261,7 +268,7 @@
    */
   async function openChat(target, superseded) {
     const name = target.name;
-    if (titleMatches(currentChatTitle(), name)) return true;
+    if (inChat(name)) return true;
 
     // 1. Already in the visible chat list? Click it directly. This needs no
     //    search box at all, so a stale search selector no longer blocks every
@@ -292,19 +299,29 @@
       return null; // caller reports "couldn't find a chat named X"
     }
 
+    // Remember the header before clicking, so "it changed" is usable evidence.
+    // Waiting merely for "a chat is open" was already true for the PREVIOUS chat
+    // and resolved instantly, which sent the script scrolling the wrong
+    // conversation; requiring an exact title match was the opposite failure,
+    // reporting "never opened" for chats that had opened fine.
+    const before = currentChatTitles().join('|');
     click(entry);
 
-    // Wait for the header to actually show the target chat. Waiting merely for
-    // "a chat is open" was already true for the PREVIOUS chat and resolved
-    // instantly — the script then scrolled the wrong conversation and blamed a
-    // missing message.
-    const switched = await waitFor(() => titleMatches(currentChatTitle(), name), 10_000).catch(
-      () => null
-    );
+    const switched = await waitFor(() => {
+      if (inChat(name)) return 'title';
+      const now = currentChatTitles().join('|');
+      if (now && now !== before && messageRows().length > 0) return 'changed';
+      return null;
+    }, 8_000).catch(() => null);
 
     if (search) clearSearchText(search);
     await sleep(300);
-    if (!switched) return `Clicked "${name}" in the sidebar but the conversation never opened.`;
+
+    // A changed-but-unmatched header is treated as success on purpose: locating
+    // the message is the real test, and a wrong chat simply won't contain it.
+    if (!switched && !inChat(name) && messageRows().length === 0) {
+      return `Clicked "${name}" in the sidebar but no conversation opened.`;
+    }
     return true;
   }
 
@@ -583,10 +600,29 @@
     box.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'deleteContentBackward' }));
   }
 
+  /**
+   * Every title-ish string in the open conversation's header.
+   *
+   * Returns a LIST, not the first hit: WhatsApp's header holds several
+   * `span[title]` elements — the chat name, the participant list, the online
+   * status — in an order that is not stable. Reading only the first one meant
+   * comparing the group name against the participant list and concluding the
+   * chat had not opened when it plainly had.
+   */
+  function currentChatTitles() {
+    return pickAll(SELECTORS.chatHeaderTitle)
+      .map((el) => el.getAttribute('title') ?? el.textContent ?? '')
+      .filter(Boolean);
+  }
+
+  /** Best guess at the open chat's name, for messages shown to the user. */
   function currentChatTitle() {
-    const el = pick(SELECTORS.chatHeaderTitle);
-    if (!el) return null;
-    return el.getAttribute('title') ?? el.textContent ?? null;
+    return currentChatTitles()[0] ?? null;
+  }
+
+  /** True when any header title corresponds to `name`. */
+  function inChat(name) {
+    return currentChatTitles().some((title) => titleMatches(title, name));
   }
 
   /** Titles compared with emoji/whitespace noise removed, either way round. */

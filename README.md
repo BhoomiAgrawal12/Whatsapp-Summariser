@@ -185,6 +185,10 @@ the extension will say so.
   finally by scanning the side pane for any editable field. If you still see this message the
   chat also wasn't in the visible list — open it once, or add a selector to
   `SELECTORS.searchBox` in `extension/content.js`.
+- *"Clicked X in the sidebar but the conversation never opened"* — fixed in 0.4.1. The
+  header title was read from the first `span[title]` only, which is often the participant
+  list rather than the chat name, so a chat that had opened fine was reported as failed.
+  Reload the extension if you still see it.
 - *Jump reports "via nearest"* — the exact message id wasn't in the page, so the row at the
   same timestamp/sender/text was highlighted. Usually means the message was re-sent or
   forwarded; the content shown is still the cited one.
