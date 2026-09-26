@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { loadConfig } from '../src/config.js';
+import { lanAddress, loadConfig } from '../src/config.js';
 
 /** A syntactically valid, obviously fake project key of realistic length. */
 const FAKE_KEY = 'sk-proj-' + 'a'.repeat(156);
@@ -113,5 +113,30 @@ describe('config loading', () => {
   it('trims a trailing slash from PUBLIC_URL', async () => {
     await write(`LLM_PROVIDER=ollama\nPUBLIC_URL=http://192.168.1.5:8790/\n`);
     assert.equal(loadConfig(dir).publicUrl, 'http://192.168.1.5:8790');
+  });
+
+  it('leaves PUBLIC_URL empty for a localhost-bound dashboard', async () => {
+    // A 127.0.0.1 link is worse than no link: on a phone it points at the phone.
+    await write('LLM_PROVIDER=ollama\n');
+    assert.equal(loadConfig(dir).publicUrl, '');
+  });
+
+  it('derives a LAN url when the dashboard is bound to all interfaces', async () => {
+    await write('LLM_PROVIDER=ollama\nDASHBOARD_HOST=0.0.0.0\nDASHBOARD_PORT=8790\n');
+    const config = loadConfig(dir);
+    const lan = lanAddress();
+    if (lan === null) {
+      // No network on this machine — the fallback has to explain itself.
+      assert.equal(config.publicUrl, '');
+      assert.match(config.warnings.join('\n'), /no LAN address was found/);
+      return;
+    }
+    assert.equal(config.publicUrl, `http://${lan}:8790`);
+    assert.doesNotMatch(config.publicUrl, /0\.0\.0\.0|127\.0\.0\.1/);
+  });
+
+  it('honours an explicit PUBLIC_URL over the derived one', async () => {
+    await write('LLM_PROVIDER=ollama\nDASHBOARD_HOST=0.0.0.0\nPUBLIC_URL=http://example.local:9000/\n');
+    assert.equal(loadConfig(dir).publicUrl, 'http://example.local:9000');
   });
 });

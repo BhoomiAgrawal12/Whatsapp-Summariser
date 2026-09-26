@@ -143,7 +143,11 @@ export class Summarizer {
       })
       .join('\n');
 
-    const content = footer ? `${digest.trim()}\n\n_Refs:_\n${footer}` : digest.trim();
+    // WhatsApp has no per-message deep link on mobile, so a citation cannot open
+    // the group itself. Say where the link *does* go, rather than leaving the
+    // reader to tap it and wonder why WhatsApp did not open.
+    const heading = base ? '_Refs_ — tap to read the message in context:' : '_Refs:_';
+    const content = footer ? `${digest.trim()}\n\n${heading}\n${footer}` : digest.trim();
     return { content, citations };
   }
 }

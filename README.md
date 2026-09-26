@@ -101,10 +101,19 @@ To open the dashboard from your phone, run with `DASHBOARD_HOST=0.0.0.0` underst
 that it is **unauthenticated** — only do this on a trusted home network
 (then visit `http://<laptop-ip>:8790`).
 
-**Clickable citations inside WhatsApp:** set `PUBLIC_URL` to the address your phone can
-reach the dashboard at (e.g. `PUBLIC_URL=http://192.168.1.20:8790`). Each `[n]` in the
-digest's `Refs:` footer then carries a `…/m/<id>` link that opens that message's context
-view directly. Leave `PUBLIC_URL` empty to keep digests link-free.
+**Clickable citations inside WhatsApp:** run with `DASHBOARD_HOST=0.0.0.0` and `PUBLIC_URL`
+is filled in from your LAN address automatically — each `[n]` in the digest's `Refs:` footer
+then carries a `…/m/<id>` link. Set `PUBLIC_URL` explicitly to override it (different port,
+hostname, tunnel). A localhost-bound dashboard deliberately produces **no** links: a
+`127.0.0.1` link tapped on a phone points at the phone.
+
+**What a citation link opens — and what it can't.** Tapping `[n]` on your phone opens the
+**dashboard's context view** for that message, not the WhatsApp group. That is a WhatsApp
+platform limit, not a bug: WhatsApp exposes no per-message (or per-group) deep link on
+mobile — `wa.me` addresses individual contacts only, and `chat.whatsapp.com` links are
+*invite* links, not "jump to this chat". So on a phone you get sender, timestamp and the
+surrounding conversation, which is enough to find the message by scrolling in WhatsApp.
+Exact jump-to-message is only possible on a desktop browser, via the Chrome extension below.
 
 ## Chrome extension — exact jump-to-message (WhatsApp Web)
 

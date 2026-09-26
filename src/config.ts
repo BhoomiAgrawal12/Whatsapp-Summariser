@@ -1,4 +1,5 @@
 import { existsSync, readFileSync } from 'node:fs';
+import { networkInterfaces } from 'node:os';
 import path from 'node:path';
 
 export interface AppConfig {
@@ -117,9 +118,59 @@ function parseValue(raw: string): string {
   return trimmed.split(/\s+#/)[0]!.trim();
 }
 
+/**
+ * This machine's LAN IPv4 address, or null if it has none.
+ *
+ * Used to fill in PUBLIC_URL automatically when the dashboard is bound to all
+ * interfaces: the user has already said "reachable from other devices", and
+ * making them look the address up by hand is the difference between citations in
+ * WhatsApp being tappable links and being plain unusable text.
+ */
+export function lanAddress(): string | null {
+  for (const addresses of Object.values(networkInterfaces())) {
+    for (const address of addresses ?? []) {
+      // Node <18 reports `family` as a string, newer as the number 4.
+      const isIpv4 = address.family === 'IPv4' || (address.family as unknown as number) === 4;
+      if (isIpv4 && !address.internal) return address.address;
+    }
+  }
+  return null;
+}
+
 function env(name: string, fallback: string): string {
   const value = process.env[name];
   return value !== undefined && value !== '' ? value : fallback;
+}
+
+/**
+ * Decide the base URL that citation links in WhatsApp digests should point at.
+ *
+ * An explicit PUBLIC_URL always wins. Otherwise, if the dashboard is bound to
+ * every interface the user has already opted into off-machine access, so derive
+ * it from the LAN address — without this, citations delivered to the phone are
+ * plain text with nothing to tap, which reads as "the references don't work".
+ *
+ * A localhost-bound dashboard stays link-free on purpose: a `127.0.0.1` link is
+ * worse than no link, because on a phone it silently points at the phone itself.
+ */
+function resolvePublicUrl(
+  explicit: string,
+  host: string,
+  port: number,
+  warnings: string[]
+): string {
+  if (explicit) return explicit.replace(/\/+$/, '');
+  if (host !== '0.0.0.0' && host !== '::') return '';
+
+  const lan = lanAddress();
+  if (!lan) {
+    warnings.push(
+      'DASHBOARD_HOST exposes the dashboard, but no LAN address was found and PUBLIC_URL is ' +
+        'unset, so citations in WhatsApp digests will have no links. Set PUBLIC_URL manually.'
+    );
+    return '';
+  }
+  return `http://${lan}:${port}`;
 }
 
 /**
@@ -176,7 +227,12 @@ export function loadConfig(cwd: string = process.cwd()): AppConfig {
     ollamaModel: env('OLLAMA_MODEL', 'llama3.1:8b'),
     dashboardPort: Number(env('DASHBOARD_PORT', '8790')),
     dashboardHost: env('DASHBOARD_HOST', '127.0.0.1'),
-    publicUrl: env('PUBLIC_URL', '').replace(/\/+$/, ''),
+    publicUrl: resolvePublicUrl(
+      env('PUBLIC_URL', ''),
+      env('DASHBOARD_HOST', '127.0.0.1'),
+      Number(env('DASHBOARD_PORT', '8790')),
+      warnings
+    ),
     dataDir: path.resolve(cwd, env('DATA_DIR', './data')),
     authDir: path.resolve(cwd, 'auth'),
     logLevel: env('LOG_LEVEL', 'info'),
