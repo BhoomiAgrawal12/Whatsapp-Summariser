@@ -191,7 +191,7 @@ server setup and deploy scripts (`deploy/`).
 
 ```bash
 npm run typecheck   # strict TS, no `any`
-npm test            # 34 unit + integration tests (node:test)
+npm test            # 52 unit + integration tests (node:test)
 npm run build       # compile to dist/
 ```
 
