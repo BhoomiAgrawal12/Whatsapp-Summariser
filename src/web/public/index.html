@@ -26,8 +26,15 @@
   .muted { color: var(--muted); font-size: 13px; }
   button.primary { background: var(--accent); color: #06251e; border: 0; padding: 8px 14px;
                    border-radius: 8px; font-weight: 600; cursor: pointer; }
-  button.ghost { background: var(--panel2); color: var(--text); border: 0; padding: 6px 12px;
-                 border-radius: 8px; cursor: pointer; font-size: 13px; }
+  /* Applies to <a class="ghost"> as well as <button class="ghost">. Scoping this to
+     `button` left every ghost LINK unstyled, so it rendered as the browser's default
+     blue underline — unreadable on this dark background. */
+  .ghost { display: inline-block; background: var(--panel2); color: var(--text); border: 0;
+           padding: 6px 12px; border-radius: 8px; cursor: pointer; font-size: 13px;
+           text-decoration: none; line-height: 1.4; }
+  a.ghost { border: 1px solid #33434e; }
+  .ghost:hover { background: #2a3942; color: #fff; }
+  a.ghost:hover { border-color: var(--accent); }
   input, textarea { background: var(--panel2); border: 1px solid #33434e; color: var(--text);
                     border-radius: 8px; padding: 8px 10px; font: inherit; }
   textarea { width: 100%; min-height: 70px; }
@@ -48,6 +55,14 @@
   .msg.target { outline: 2px solid var(--accent); }
   .msg .who { color: var(--accent); font-size: 13px; font-weight: 600; }
   .msg .when { color: var(--muted); font-size: 12px; margin-left: 8px; }
+  .msg-head { display: flex; align-items: baseline; gap: 4px; }
+  /* Pushed to the right and kept quiet on every row except the cited one, which
+     spells the action out. Previously each row carried a full-width labelled link,
+     which buried the messages themselves. */
+  .msg-head .open-wa { margin-left: auto; color: var(--muted); text-decoration: none;
+                       font-size: 12px; white-space: nowrap; padding: 2px 6px; border-radius: 6px; }
+  .msg-head .open-wa:hover { color: var(--accent); background: #2a3942; }
+  .msg.target .open-wa { color: var(--accent); border: 1px solid var(--accent); }
   .starred-media img { max-width: 100%; border-radius: 10px; margin-top: 8px; }
   .empty { text-align: center; color: var(--muted); padding: 40px 0; }
   .spin { display: inline-block; animation: r 1s linear infinite; }
@@ -144,11 +159,12 @@ async function showContext(messageId) {
   $modalBox.innerHTML = `<h3>Message context <span class="muted">· ${esc(chatName)}</span></h3>` +
     messages.map((m) => `
       <div class="msg ${m.id === target ? 'target' : ''}">
-        <span class="who">${esc(m.senderName)}</span><span class="when">${fmt(m.timestamp)}${m.edited ? ' · edited' : ''}</span>
+        <div class="msg-head">
+          <span class="who">${esc(m.senderName)}</span><span class="when">${fmt(m.timestamp)}${m.edited ? ' · edited' : ''}</span>
+          <a class="open-wa" target="_blank" rel="noopener" title="Open this message in WhatsApp Web (needs the companion extension)"
+             href="${wwebJumpUrl({ ...m, chatName })}">${m.id === target ? 'Open in WhatsApp Web ↗' : '↗'}</a>
+        </div>
         <div>${esc(m.text || '(' + m.kind + ')')}</div>
-        <div style="margin-top:6px"><a class="ghost" target="_blank" rel="noopener"
-            href="${wwebJumpUrl({ ...m, chatName })}">Open in WhatsApp Web ↗</a>
-          ${m.id === target ? '<span class="muted" style="font-size:12px">(needs the companion extension)</span>' : ''}</div>
       </div>`).join('');
   $modal.classList.add('open');
   $modalBox.querySelector('.target')?.scrollIntoView({ block: 'center' });
