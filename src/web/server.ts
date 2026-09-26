@@ -7,6 +7,7 @@ import type { MessageRepo } from '../store/messages.js';
 import type { SettingsRepo } from '../store/settings.js';
 import type { StarredRepo } from '../store/starred.js';
 import type { SummaryRepo } from '../store/summaries.js';
+import type { NotesRepo } from '../store/notes.js';
 import type { Summarizer } from '../summarize/summarizer.js';
 import { parseWindowPhrase } from '../commands/parser.js';
 import { formatRange } from '../util/time.js';
@@ -24,6 +25,7 @@ export interface WebDeps {
   messages: MessageRepo;
   summaries: SummaryRepo;
   starred: StarredRepo;
+  notes: NotesRepo;
   settings: SettingsRepo;
   summarizer: Summarizer;
   dataDir: string;
@@ -133,6 +135,58 @@ async function route(deps: WebDeps, req: IncomingMessage, res: ServerResponse): 
       }
       deps.settings.setSchedule(body.chatJid, body.time ?? null);
       return json(res, 200, { ok: true });
+    }
+
+    case 'GET notes':
+      return json(res, 200, deps.notes.list());
+
+    case 'POST notes': {
+      const body = await readJson(req);
+      // "/api/notes/reorder" shares this method+resource pair.
+      if (segments[2] === 'reorder') {
+        const ids = (body as { ids?: unknown }).ids;
+        if (!Array.isArray(ids) || ids.some((id) => !Number.isInteger(id))) {
+          return json(res, 400, { error: 'expected { ids: number[] }' });
+        }
+        deps.notes.reorder(ids as number[]);
+        return json(res, 200, deps.notes.list());
+      }
+      const { title, body: text, chatJid, source } = body as {
+        title?: unknown; body?: unknown; chatJid?: unknown; source?: unknown;
+      };
+      const note = {
+        title: typeof title === 'string' ? title.trim() : '',
+        body: typeof text === 'string' ? text : '',
+        chatJid: typeof chatJid === 'string' && chatJid ? chatJid : null,
+        source: typeof source === 'string' ? source : '',
+      };
+      if (!note.title && !note.body.trim()) {
+        return json(res, 400, { error: 'a note needs a title or some text' });
+      }
+      return json(res, 201, deps.notes.create(note, Date.now()));
+    }
+
+    case 'PUT notes': {
+      const id = Number(segments[2]);
+      if (!Number.isInteger(id)) return json(res, 400, { error: 'bad note id' });
+      const body = await readJson(req) as { title?: unknown; body?: unknown };
+      const updated = deps.notes.update(
+        id,
+        {
+          ...(typeof body.title === 'string' ? { title: body.title.trim() } : {}),
+          ...(typeof body.body === 'string' ? { body: body.body } : {}),
+        },
+        Date.now()
+      );
+      return updated ? json(res, 200, updated) : json(res, 404, { error: 'note not found' });
+    }
+
+    case 'DELETE notes': {
+      const id = Number(segments[2]);
+      if (!Number.isInteger(id)) return json(res, 400, { error: 'bad note id' });
+      return deps.notes.remove(id)
+        ? json(res, 200, { ok: true })
+        : json(res, 404, { error: 'note not found' });
     }
 
     case 'GET context': {

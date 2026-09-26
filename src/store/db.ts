@@ -61,6 +61,23 @@ CREATE TABLE IF NOT EXISTS settings (
   key   TEXT PRIMARY KEY,
   value TEXT NOT NULL
 );
+
+-- Free-form notes the user writes themselves. Independent of messages and
+-- summaries on purpose: a note must survive the chat, the group and the digest
+-- it came from being deleted, so nothing here is a foreign key.
+CREATE TABLE IF NOT EXISTS notes (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  title      TEXT NOT NULL DEFAULT '',
+  body       TEXT NOT NULL DEFAULT '',
+  -- Manual ordering, rewritten as a block whenever the user reorders.
+  position   INTEGER NOT NULL DEFAULT 0,
+  -- Optional provenance when a note was started from a digest or a chat.
+  chat_jid   TEXT,
+  source     TEXT NOT NULL DEFAULT '',
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_notes_position ON notes (position, id);
 `;
 
 /** Open (creating if needed) the app database with WAL mode for concurrent reads. */

@@ -63,6 +63,9 @@ src/
   wa/extract.ts     # proto message -> text/type extraction (pure, tested)
   ingest/ingest.ts  # messages.upsert / history / reactions(⭐→archive) / edits/deletes
   store/            # db.ts (schema) + one repository per table
+                    #   notes.ts — user-written notes; NO foreign keys on purpose, so a
+                    #   note outlives the chat/summary it came from. Manual `position`
+                    #   ordering rewritten as one transaction on reorder.
   llm/              # provider.ts (interface+factory), openai.ts, ollama.ts
   summarize/        # chunk.ts (pure, tested), prompts.ts, summarizer.ts
   commands/         # parser.ts (pure, tested), handler.ts (self-chat commands + delivery)

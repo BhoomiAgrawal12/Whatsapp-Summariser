@@ -9,6 +9,7 @@ import { MessageRepo } from './store/messages.js';
 import { SettingsRepo } from './store/settings.js';
 import { StarredRepo } from './store/starred.js';
 import { SummaryRepo } from './store/summaries.js';
+import { NotesRepo } from './store/notes.js';
 import { Summarizer } from './summarize/summarizer.js';
 import { WaConnection } from './wa/connection.js';
 import { startWebServer } from './web/server.js';
@@ -29,6 +30,7 @@ async function main(): Promise<void> {
   const summaries = new SummaryRepo(db);
   const starred = new StarredRepo(db);
   const settings = new SettingsRepo(db);
+  const notes = new NotesRepo(db);
 
   const provider = createProvider(config);
   const summarizer = new Summarizer(provider, messages, summaries, settings, logger, {
@@ -57,7 +59,7 @@ async function main(): Promise<void> {
   scheduler.start();
 
   const web = startWebServer(
-    { messages, summaries, starred, settings, summarizer, dataDir: config.dataDir, logger },
+    { messages, summaries, starred, notes, settings, summarizer, dataDir: config.dataDir, logger },
     config.dashboardPort,
     config.dashboardHost
   );

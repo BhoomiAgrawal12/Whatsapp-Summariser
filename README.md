@@ -28,6 +28,7 @@ phone, tablet and laptop. Nobody in any group ever sees anything.
 - ⭐ **Permanent star archive** — star a message in WhatsApp (or react ⭐); it's copied (incl. media) into your own DB and survives chat clearing
 - 💾 **Saved summaries** — every digest is stored; every `[n]` citation resolves to the exact
   message — full context in the dashboard, and one click into WhatsApp Web via the companion extension
+- 📝 **Notes** — keep your own notes in your own words; editable, deletable, reorderable, searchable
 - ⏰ **Daily digests** — per group at a time you pick
 - 🧠 **OpenAI or fully-local Ollama** — one env var to switch
 
@@ -103,6 +104,10 @@ starred** before you set this up are archived as WhatsApp syncs your history.
 - **Summaries** — browse everything ever generated. Click any `[n]` citation to open the
   surrounding conversation context; click the `↗` next to it to jump straight to that exact
   message in WhatsApp Web (needs the extension below)
+- **Notes 📝** — your own notes, in your own words. Create, edit, delete and reorder them
+  (↑/↓); search across titles and text. Any summary has a **Save as note** button that seeds
+  a note with that digest so you can rewrite it. Notes are standalone — they hold no link to
+  a message, so they survive the chat, group or digest they came from being deleted.
 - **Starred** — your permanent archive (images shown inline, other media downloadable)
 - **Topics & Schedules** — edit your topic profile and daily digest times
 

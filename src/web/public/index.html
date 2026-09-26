@@ -78,6 +78,15 @@
   .section-heading { color: var(--muted); font-size: 12px; font-weight: 600; letter-spacing: .06em;
                      text-transform: uppercase; margin: 16px 2px 6px; }
   .section-heading:first-child { margin-top: 0; }
+  .note-head { display: flex; align-items: flex-start; gap: 8px; }
+  .note-head h3 { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+  .note-actions { display: flex; gap: 4px; flex-shrink: 0; }
+  .note-actions button { padding: 4px 8px; }
+  .note-actions button[disabled] { opacity: .35; cursor: default; }
+  /* Notes are plain text: keep the user's own line breaks without letting a
+     long pasted digest blow out the layout. */
+  .note-body { white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 8px; }
+  .note .e-body { min-height: 160px; }
   .sched-row { border-bottom: 1px solid #1c2a33; padding-bottom: 8px; }
   .sched-name { flex: 1 1 180px; min-width: 0; overflow: hidden; text-overflow: ellipsis;
                 white-space: nowrap; }
@@ -103,7 +112,7 @@
 
 <script>
 'use strict';
-const TABS = [['groups','Groups'],['summaries','Summaries'],['starred','Starred ⭐'],['settings','Topics & Schedules']];
+const TABS = [['groups','Groups'],['summaries','Summaries'],['notes','Notes 📝'],['starred','Starred ⭐'],['settings','Topics & Schedules']];
 /** One-click windows — the value is a phrase the server parses (same grammar as /sum). */
 const PRESETS = [
   ['today', 'Today'],
@@ -216,7 +225,33 @@ function summaryCard(s, needle) {
     <h3>${highlight(s.chatName, needle)} <span class="muted">#${s.id}</span></h3>
     <div class="muted">${fmt(s.fromTs)} → ${fmt(s.toTs)} · ${s.messageCount} messages · created ${fmt(s.createdAt)}</div>
     <div class="digest${long ? ' clipped' : ''}" style="margin-top:8px">${digestHtml(s.content, s.citations, s.chatName)}</div>
-    ${long ? '<button class="ghost expand">Show more ▾</button>' : ''}`;
+    <div class="row">
+      ${long ? '<button class="ghost expand">Show more ▾</button>' : ''}
+      <button class="ghost to-note" title="Start a note from this digest">📝 Save as note</button>
+      <span class="muted note-status"></span>
+    </div>`;
+
+  // Seed a note with the digest so it can be rewritten in the user's own words,
+  // rather than making them copy it across by hand.
+  div.querySelector('.to-note').addEventListener('click', async () => {
+    const status = div.querySelector('.note-status');
+    status.textContent = 'saving…';
+    try {
+      await api('/api/notes', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          title: `${s.chatName} — ${fmt(s.fromTs)} → ${fmt(s.toTs)}`,
+          body: s.content,
+          chatJid: s.chatJid,
+          source: `from summary #${s.id}`,
+        }),
+      });
+      status.textContent = '✓ saved to Notes — edit it there';
+    } catch (err) {
+      status.textContent = '❌ ' + err.message;
+    }
+  });
 
   if (long) {
     const body = div.querySelector('.digest');
@@ -397,6 +432,7 @@ async function render() {
   try {
     if (activeTab === 'groups') await renderGroups();
     if (activeTab === 'summaries') await renderSummaries();
+    if (activeTab === 'notes') await renderNotes();
     if (activeTab === 'starred') await renderStarred();
     if (activeTab === 'settings') await renderSettings();
   } catch (err) {
@@ -519,6 +555,149 @@ async function renderSummaries() {
     },
     renderItem: (s, needle) => summaryCard(s, needle),
   });
+}
+
+/* ------------------------------------------------------------------ Notes */
+
+/** Loaded notes, kept in the user's chosen order so reordering is instant. */
+let notes = [];
+
+async function renderNotes() {
+  notes = await api('/api/notes');
+  $view.innerHTML = '';
+
+  const composer = document.createElement('div');
+  composer.className = 'card';
+  composer.innerHTML = `
+    <h3>📝 New note</h3>
+    <div class="row"><input class="note-title" style="flex:1" placeholder="Title (optional)"></div>
+    <div class="row"><textarea class="note-body" placeholder="Write it in your own words…"></textarea></div>
+    <div class="row"><button class="primary add">Save note</button><span class="muted status"></span></div>`;
+
+  const $title = composer.querySelector('.note-title');
+  const $body = composer.querySelector('.note-body');
+  const $status = composer.querySelector('.status');
+
+  const add = async () => {
+    if (!$title.value.trim() && !$body.value.trim()) {
+      $status.textContent = 'Write something first.';
+      return;
+    }
+    $status.textContent = 'saving…';
+    try {
+      await api('/api/notes', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ title: $title.value, body: $body.value }),
+      });
+      $title.value = '';
+      $body.value = '';
+      await renderNotes();
+    } catch (err) {
+      $status.textContent = '❌ ' + err.message;
+    }
+  };
+  composer.querySelector('.add').addEventListener('click', () => void add());
+  // Ctrl/Cmd+Enter saves, the usual shortcut for a compose box.
+  $body.addEventListener('keydown', (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') void add();
+  });
+  $view.appendChild(composer);
+
+  const list = document.createElement('div');
+  $view.appendChild(list);
+
+  filterableList({
+    mount: list,
+    items: notes,
+    key: 'notes',
+    placeholder: 'Search your notes…',
+    noun: 'notes',
+    emptyText: 'No notes yet. Write one above, or use “Save as note” on any summary.',
+    searchText: (n) => `${n.title} ${n.body} ${n.source}`,
+    // No sort control: the whole point is the order the user arranged. The list
+    // arrives from the server already in `position` order.
+    renderItem: (n, needle) => noteCard(n, needle),
+  });
+}
+
+function noteCard(note, needle) {
+  const card = document.createElement('div');
+  card.className = 'card note';
+  const index = notes.findIndex((n) => n.id === note.id);
+
+  const view = () => {
+    card.innerHTML = `
+      <div class="note-head">
+        <h3>${note.title ? highlight(note.title, needle) : '<span class="muted">Untitled</span>'}</h3>
+        <div class="note-actions">
+          <button class="ghost up" title="Move up" ${index <= 0 ? 'disabled' : ''}>↑</button>
+          <button class="ghost down" title="Move down" ${index >= notes.length - 1 ? 'disabled' : ''}>↓</button>
+          <button class="ghost edit">Edit</button>
+          <button class="ghost del" title="Delete">🗑</button>
+        </div>
+      </div>
+      <div class="muted">${note.source ? esc(note.source) + ' · ' : ''}updated ${fmt(note.updatedAt)}</div>
+      <div class="note-body">${highlight(note.body, needle)}</div>`;
+
+    card.querySelector('.edit').addEventListener('click', edit);
+    card.querySelector('.up').addEventListener('click', () => void move(-1));
+    card.querySelector('.down').addEventListener('click', () => void move(1));
+    card.querySelector('.del').addEventListener('click', () => void remove());
+  };
+
+  const edit = () => {
+    card.innerHTML = `
+      <div class="row"><input class="e-title" style="flex:1" placeholder="Title (optional)" value="${esc(note.title)}"></div>
+      <div class="row"><textarea class="e-body"></textarea></div>
+      <div class="row"><button class="primary save">Save</button>
+        <button class="ghost cancel">Cancel</button><span class="muted status"></span></div>`;
+    // Set through .value, not an HTML attribute: a body containing "</textarea>"
+    // would otherwise break out of the element.
+    const $body = card.querySelector('.e-body');
+    $body.value = note.body;
+
+    card.querySelector('.cancel').addEventListener('click', view);
+    card.querySelector('.save').addEventListener('click', async () => {
+      const $status = card.querySelector('.status');
+      $status.textContent = 'saving…';
+      try {
+        const updated = await api(`/api/notes/${note.id}`, {
+          method: 'PUT',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ title: card.querySelector('.e-title').value, body: $body.value }),
+        });
+        Object.assign(note, updated);
+        view();
+      } catch (err) {
+        $status.textContent = '❌ ' + err.message;
+      }
+    });
+  };
+
+  const remove = async () => {
+    if (!confirm(`Delete "${note.title || 'this note'}"? This cannot be undone.`)) return;
+    await api(`/api/notes/${note.id}`, { method: 'DELETE' });
+    await renderNotes();
+  };
+
+  /** Swap with the neighbour and persist the whole order. */
+  const move = async (delta) => {
+    const from = notes.findIndex((n) => n.id === note.id);
+    const to = from + delta;
+    if (from === -1 || to < 0 || to >= notes.length) return;
+    const reordered = notes.slice();
+    [reordered[from], reordered[to]] = [reordered[to], reordered[from]];
+    notes = await api('/api/notes/reorder', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ ids: reordered.map((n) => n.id) }),
+    });
+    await renderNotes();
+  };
+
+  view();
+  return card;
 }
 
 /** One group's daily-digest row, with immediate feedback on save. */

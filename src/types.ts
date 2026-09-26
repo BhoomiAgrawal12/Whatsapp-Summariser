@@ -84,6 +84,25 @@ export interface StarredMessage {
   mediaPath: string | null;
 }
 
+/**
+ * A note the user wrote themselves. Deliberately standalone — it holds no
+ * foreign key to a message or summary, so it survives the chat, group or digest
+ * it was started from being deleted.
+ */
+export interface Note {
+  id: number;
+  title: string;
+  body: string;
+  /** Manual sort key; lower sorts first. */
+  position: number;
+  /** Optional provenance: the chat this note was started from. */
+  chatJid: string | null;
+  /** Optional human-readable provenance, e.g. "from summary #12". */
+  source: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
 export interface TopicProfile {
   /** Free-text interests, e.g. "tech talks, AI tools, hackathon announcements". */
   interests: string;
