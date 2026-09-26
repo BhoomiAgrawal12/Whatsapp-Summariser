@@ -37,12 +37,30 @@
     appReady: ['#pane-side', '#side', 'div[data-testid="chat-list"]'],
     // Login screen (QR) — present instead of the chat list when not paired.
     loginQr: ['canvas[aria-label*="scan" i]', 'div[data-ref]', 'canvas[role="img"]'],
+    // WhatsApp has shipped several shapes for the search field (contenteditable
+    // with data-tab="3", a Lexical editor, and a plain <input>), and the
+    // data-tab number has changed between builds. Ordered most- to
+    // least-specific; `findSearchBox` adds a structural fallback after these.
     searchBox: [
       'div[contenteditable="true"][data-tab="3"]',
       'div[role="textbox"][data-tab="3"]',
+      'div[contenteditable="true"][data-lexical-editor="true"]',
       '#side div[contenteditable="true"]',
+      '#side input[type="text"]',
       'div[title="Search input textbox"]',
+      '[aria-label="Search input textbox"]',
+      '#side [aria-label*="Search" i]',
+      '[data-testid="chat-list-search"]',
     ],
+    /** Collapsed builds need the search revealed before the field exists. */
+    searchTrigger: [
+      'button[aria-label*="Search" i]',
+      '#side [data-icon="search"]',
+      '#side [data-icon="search-refreshed"]',
+      'span[data-icon="search"]',
+    ],
+    /** Root of the chat-list pane; the structural search fallback looks inside it. */
+    sidePane: ['#pane-side', '#side'],
     sidebarTitles: ['#pane-side span[title]', '#side span[title]'],
     /** Rows in the sidebar/search results list — a chat hit or a message hit. */
     sidebarRows: [
@@ -245,24 +263,32 @@
     const name = target.name;
     if (titleMatches(currentChatTitle(), name)) return true;
 
-    const search = pick(SELECTORS.searchBox);
-    if (!search) return 'Could not find the WhatsApp Web search box (its DOM changed) — update SELECTORS in content.js.';
+    // 1. Already in the visible chat list? Click it directly. This needs no
+    //    search box at all, so a stale search selector no longer blocks every
+    //    jump — which is what "could not find the search box" used to do.
+    let entry = sidebarEntryFor(name);
+    let search = null;
 
-    if (!setSearchText(search, name)) {
-      return 'Could not type into the WhatsApp Web search box (its editor changed).';
+    if (!entry) {
+      // 2. Otherwise drive the search field to surface it.
+      search = await findSearchBox();
+      if (!search) {
+        return (
+          'Could not find the WhatsApp Web search box, and "' + name + '" is not in the ' +
+          'visible chat list. Open that chat once (or scroll to it in the sidebar) and click ' +
+          'the citation again. If this keeps happening, WhatsApp changed its DOM — add a ' +
+          'selector to SELECTORS.searchBox in content.js.'
+        );
+      }
+      if (!setSearchText(search, name)) {
+        return 'Could not type into the WhatsApp Web search box (its editor changed).';
+      }
+      entry = await waitFor(() => sidebarEntryFor(name), 8_000).catch(() => null);
     }
 
-    const entry = await waitFor(() => {
-      const titles = pickAll(SELECTORS.sidebarTitles);
-      return (
-        titles.find((s) => (s.getAttribute('title') ?? '') === name) ??
-        titles.find((s) => titleMatches(s.getAttribute('title'), name)) ??
-        null
-      );
-    }, 8_000).catch(() => null);
     if (superseded()) return true;
     if (!entry) {
-      clearSearchText(search);
+      if (search) clearSearchText(search);
       return null; // caller reports "couldn't find a chat named X"
     }
 
@@ -276,10 +302,67 @@
       () => null
     );
 
-    clearSearchText(search);
+    if (search) clearSearchText(search);
     await sleep(300);
     if (!switched) return `Clicked "${name}" in the sidebar but the conversation never opened.`;
     return true;
+  }
+
+  /** A sidebar chat entry whose title matches `name`, exact match preferred. */
+  function sidebarEntryFor(name) {
+    const titles = pickAll(SELECTORS.sidebarTitles);
+    return (
+      titles.find((s) => (s.getAttribute('title') ?? '') === name) ??
+      titles.find((s) => titleMatches(s.getAttribute('title'), name)) ??
+      null
+    );
+  }
+
+  /**
+   * Locate the search field, revealing it first if the build keeps it collapsed.
+   *
+   * Beyond the selector list this falls back to a STRUCTURAL scan of the side
+   * pane for anything editable, because the exact attributes WhatsApp puts on
+   * that field keep changing and a hardcoded list goes stale silently.
+   */
+  async function findSearchBox() {
+    const direct = pick(SELECTORS.searchBox);
+    if (direct && isVisible(direct)) return direct;
+
+    // Some builds only mount the field after the search affordance is clicked.
+    const trigger = pick(SELECTORS.searchTrigger);
+    if (trigger) {
+      click(trigger);
+      const revealed = await waitFor(() => {
+        const el = pick(SELECTORS.searchBox) ?? scanForEditable();
+        return el && isVisible(el) ? el : null;
+      }, 2_500).catch(() => null);
+      if (revealed) return revealed;
+    }
+
+    const scanned = scanForEditable();
+    return scanned && isVisible(scanned) ? scanned : null;
+  }
+
+  /** Any visible editable field inside the chat-list pane, best candidate first. */
+  function scanForEditable() {
+    const pane = pick(SELECTORS.sidePane) ?? document.body;
+    const candidates = [
+      ...queryAll('[contenteditable="true"]', pane),
+      ...queryAll('input:not([type="hidden"]):not([type="checkbox"])', pane),
+    ].filter(isVisible);
+    // Prefer one that advertises itself as search in any of the usual places.
+    const labelled = candidates.find((el) =>
+      ['aria-label', 'title', 'placeholder', 'aria-placeholder'].some((attr) =>
+        /search/i.test(el.getAttribute(attr) ?? '')
+      )
+    );
+    return labelled ?? candidates[0] ?? null;
+  }
+
+  function isVisible(el) {
+    if (!el || !el.getClientRects) return false;
+    return el.getClientRects().length > 0;
   }
 
   /**
@@ -289,7 +372,7 @@
    * @returns {Promise<boolean>} whether the target row ended up on screen.
    */
   async function jumpViaSearch(target, superseded) {
-    const search = pick(SELECTORS.searchBox);
+    const search = await findSearchBox();
     if (!search) return false;
     // WhatsApp's search is literal; a trimmed phrase matches more reliably than
     // a long snippet that may have been cut mid-word.
@@ -440,6 +523,11 @@
    */
   function setSearchText(box, text) {
     box.focus();
+    // A real <input> needs its value set through the native setter, otherwise
+    // React's synthetic onChange never fires and WhatsApp ignores the text.
+    if (box.tagName === 'INPUT' || box.tagName === 'TEXTAREA') {
+      return setNativeValue(box, text) && box.value === text;
+    }
     try {
       document.execCommand('selectAll', false);
       if (document.execCommand('insertText', false, text)) return true;
@@ -461,8 +549,30 @@
     }
   }
 
+  /**
+   * Set an <input>/<textarea> value the way React notices: assign through the
+   * prototype's native setter (React patches the instance property to track
+   * changes), then dispatch `input`.
+   */
+  function setNativeValue(el, value) {
+    try {
+      const proto = Object.getPrototypeOf(el);
+      const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
+      if (setter) setter.call(el, value);
+      else el.value = value;
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   function clearSearchText(box) {
     box.focus();
+    if (box.tagName === 'INPUT' || box.tagName === 'TEXTAREA') {
+      setNativeValue(box, '');
+      return;
+    }
     try {
       document.execCommand('selectAll', false);
       if (document.execCommand('delete', false)) return;

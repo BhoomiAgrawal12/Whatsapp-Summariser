@@ -156,8 +156,12 @@ the extension will say so.
   Chrome needs the one directly containing `manifest.json`.
 - *Icon there, nothing happens on click-through* — open the popup and read "Last jump".
   "Not logged in" and "open in another tab — click Use Here" are reported explicitly.
-- *"Could not find the WhatsApp Web search box"* — WhatsApp changed its DOM; add a selector
-  to `SELECTORS.searchBox`.
+- *"Could not find the WhatsApp Web search box"* — WhatsApp changed its DOM. This no longer
+  blocks the jump on its own: the chat is opened from the visible sidebar list first, and the
+  search field is located by selector list, by revealing a collapsed search button, and
+  finally by scanning the side pane for any editable field. If you still see this message the
+  chat also wasn't in the visible list — open it once, or add a selector to
+  `SELECTORS.searchBox` in `extension/content.js`.
 - *Jump reports "via nearest"* — the exact message id wasn't in the page, so the row at the
   same timestamp/sender/text was highlighted. Usually means the message was re-sent or
   forwarded; the content shown is still the cited one.

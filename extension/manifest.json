@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "WA Summarizer — Jump to Message",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Companion for the WhatsApp Summarizer dashboard: opens WhatsApp Web and jumps to the exact cited message.",
   "icons": {
     "16": "icons/icon16.png",
