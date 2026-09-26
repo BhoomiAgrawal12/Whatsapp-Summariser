@@ -16,7 +16,13 @@ import { startWebServer } from './web/server.js';
 async function main(): Promise<void> {
   const config = loadConfig();
   const logger = createLogger(config.logLevel);
-  logger.info({ provider: config.llmProvider }, 'starting WhatsApp summarizer');
+  logger.info(
+    { provider: config.llmProvider, model: config.openaiModel, credential: config.credentialShape },
+    'starting WhatsApp summarizer'
+  );
+  // Surfaced loudly: these are the cases where the value being used is not the
+  // one the config file appears to specify.
+  for (const warning of config.warnings) logger.warn(`config: ${warning}`);
 
   const db = openDb(config.dataDir);
   const messages = new MessageRepo(db);

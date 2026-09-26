@@ -31,14 +31,25 @@ see `PLAN.md`. Run/usage instructions: see `README.md`.
 
 ```bash
 npm run dev        # run with tsx (dev)
+npm run check-env  # config doctor: what was loaded, secrets reduced to prefix+length
 npm run build      # tsc -> dist/
 npm start          # node dist/index.js
 npm test           # node:test unit tests via tsx
 npm run typecheck  # tsc --noEmit
 ```
 
-Config via `.env` (see `.env.example`): `OPENAI_API_KEY`, `LLM_PROVIDER=openai|ollama`,
-`OPENAI_MODEL`, `OLLAMA_MODEL`, `OLLAMA_URL`, `DASHBOARD_PORT`, `DATA_DIR`.
+Config keys (see `.env.example`): `OPENAI_API_KEY`, `LLM_PROVIDER=openai|ollama`,
+`OPENAI_MODEL`, `OLLAMA_MODEL`, `OLLAMA_URL`, `DASHBOARD_PORT`, `DASHBOARD_HOST`,
+`PUBLIC_URL`, `DATA_DIR`.
+
+`config.ts` owns the dotenv parsing (quotes, `export` prefix, trailing comments, CRLF).
+Real env vars still win over the file, but every case where the file's value is NOT the one
+used is collected into `config.warnings` and logged at startup — a silently-wrong secret
+surfaces only as a provider 401, which names no cause. Credentials are validated for shape
+(prefix, no whitespace, plausible length) and summarised as `{prefix, length}` for logging;
+the prefix identifies the key *type* and is identical across keys of that type, so it is
+safe to log — never log a secret itself. Config is read ONCE at startup, so editing the file
+needs a restart; that is the usual explanation for "my key is right but I still get 401".
 
 ## Layout
 

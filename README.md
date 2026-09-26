@@ -191,8 +191,9 @@ server setup and deploy scripts (`deploy/`).
 
 ```bash
 npm run typecheck   # strict TS, no `any`
-npm test            # 52 unit + integration tests (node:test)
+npm test            # 64 unit + integration tests (node:test)
 npm run build       # compile to dist/
+npm run check-env   # config doctor — see below
 ```
 
 Architecture and conventions: see [CLAUDE.md](./CLAUDE.md). Code layout:
@@ -209,6 +210,22 @@ src/util       time formatting/parsing
 src/scheduler  daily digests
 ```
 
+## Checking your configuration
+
+```bash
+npm run check-env
+```
+
+Loads your configuration exactly the way the app does and prints what it got —
+**without printing any secret** (API keys are reduced to a type prefix and a character
+count). It flags the cases where the value being used is not the one the file appears to
+specify: a shell variable shadowing the file, a key defined twice, or a long value an
+editor wrapped onto a second line (which truncates it). The output is safe to paste into a
+bug report.
+
+Configuration is read **once at startup**. After editing it you must restart the app — a
+running process keeps the values it booted with.
+
 ## Troubleshooting
 
 - **QR never appears, log loops `connection closed, reconnecting` with `statusCode: 405`** —
@@ -218,6 +235,11 @@ src/scheduler  daily digests
   lookup failed (offline / blocked), you'll see `falling back to the WA version bundled
   with baileys` — fix connectivity to `web.whatsapp.com` and restart.
 - **QR never appears, no 405** — delete `auth/` and restart.
+- **`401 Incorrect API key provided` even though your key is correct** — the running
+  process still holds the key it started with; configuration is read once at boot. Restart
+  it (`Ctrl-C`, then `npm run dev`). Use `npm run check-env` to confirm what the file now
+  contains; the startup log prints the key's type and length and warns if a shell variable
+  is shadowing the file.
 - **"logged out by WhatsApp"** — the device was unlinked (from the phone or by WhatsApp);
   delete `auth/` and re-pair.
 - **Group shows no messages** — the service only records messages received while running
