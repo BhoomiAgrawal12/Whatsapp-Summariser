@@ -274,6 +274,9 @@ running process keeps the values it booted with.
   lookup failed (offline / blocked), you'll see `falling back to the WA version bundled
   with baileys` — fix connectivity to `web.whatsapp.com` and restart.
 - **QR never appears, no 405** — delete `auth/` and restart.
+- **A dashboard tab fails with "not found"** — the running process is older than the
+  dashboard files (routes are fixed at startup; the HTML is re-read from disk every
+  request). A banner now says so explicitly. Restart: `Ctrl-C`, then `npm run dev`.
 - **`401 Incorrect API key provided` even though your key is correct** — the running
   process still holds the key it started with; configuration is read once at boot. Restart
   it (`Ctrl-C`, then `npm run dev`). Use `npm run check-env` to confirm what the file now

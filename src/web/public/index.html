@@ -97,6 +97,9 @@
   .digest.clipped { max-height: 190px; overflow: hidden;
                     -webkit-mask-image: linear-gradient(#000 60%, transparent);
                     mask-image: linear-gradient(#000 60%, transparent); }
+  .banner { background: #4a2c00; color: #ffd8a8; border-bottom: 1px solid #7a4a00;
+            padding: 10px 16px; font-size: 14px; line-height: 1.5; }
+  .banner code { background: rgba(0,0,0,.35); padding: 1px 5px; border-radius: 4px; }
   .spin { display: inline-block; animation: r 1s linear infinite; }
   @keyframes r { to { transform: rotate(360deg); } }
 </style>
@@ -122,6 +125,17 @@ const PRESETS = [
   ['this week', 'This week'],
   ['last week', 'Last week'],
 ];
+/**
+ * API version this dashboard needs. The server reads this HTML from disk on
+ * every request but keeps the routes it booted with, so after a pull the browser
+ * can load a NEW dashboard against an OLD process — every new endpoint then 404s
+ * with a bare "not found". Comparing versions turns that into a clear
+ * "restart the app" banner.
+ *
+ * Keep in step with API_VERSION in src/web/server.ts.
+ */
+const API_VERSION = 2;
+
 let activeTab = 'groups';
 
 const $view = document.getElementById('view');
@@ -841,7 +855,30 @@ async function openDeepLink() {
   }
 }
 
+/**
+ * Warn when the running app is older than these dashboard files.
+ * A missing /api/health means the process predates the check entirely.
+ */
+async function checkServerVersion() {
+  let serverVersion = 0;
+  try {
+    const health = await api('/api/health');
+    serverVersion = health.apiVersion || 0;
+  } catch {
+    serverVersion = 0; // 404 — an older server than this dashboard expects
+  }
+  if (serverVersion >= API_VERSION) return;
+
+  const banner = document.createElement('div');
+  banner.className = 'banner';
+  banner.innerHTML = `⚠️ <b>Restart the app.</b> This dashboard expects API v${API_VERSION} but the
+    running process provides v${serverVersion || '&lt;1'} — it was started before these files changed, so
+    newer tabs will fail with “not found”. Stop it (Ctrl-C) and run <code>npm run dev</code> again.`;
+  document.body.insertBefore(banner, document.body.firstChild);
+}
+
 render().then(openDeepLink);
+void checkServerVersion();
 </script>
 </body>
 </html>

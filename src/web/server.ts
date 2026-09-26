@@ -12,6 +12,19 @@ import type { Summarizer } from '../summarize/summarizer.js';
 import { parseWindowPhrase } from '../commands/parser.js';
 import { formatRange } from '../util/time.js';
 
+/**
+ * Bumped whenever the dashboard gains an endpoint it cannot work without.
+ *
+ * The HTML is read from disk on every request, but the routes are whatever the
+ * running process was started with — so after a pull, a browser can load a NEW
+ * dashboard against an OLD server and every new endpoint 404s with a bare "not
+ * found". `index.html` carries the version it expects and compares the two, so
+ * that shows up as "restart the app" instead of a mystery error.
+ *
+ * Keep this in step with API_VERSION in src/web/public/index.html.
+ */
+const API_VERSION = 2;
+
 const MEDIA_MIME: Record<string, string> = {
   jpg: 'image/jpeg',
   png: 'image/png',
@@ -63,7 +76,13 @@ async function route(deps: WebDeps, req: IncomingMessage, res: ServerResponse): 
   if (method === 'GET' && (url.pathname === '/' || url.pathname === '/index.html' || isDeepLink)) {
     const htmlPath = fileURLToPath(new URL('./public/index.html', import.meta.url));
     const html = await readFile(htmlPath);
-    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+    // no-store: the dashboard is a single file that changes with the code, and a
+    // cached copy would reintroduce exactly the stale-UI problem the version
+    // check below exists to catch.
+    res.writeHead(200, {
+      'content-type': 'text/html; charset=utf-8',
+      'cache-control': 'no-store',
+    });
     res.end(html);
     return;
   }
@@ -75,6 +94,9 @@ async function route(deps: WebDeps, req: IncomingMessage, res: ServerResponse): 
   if (segments[0] !== 'api') return json(res, 404, { error: 'not found' });
 
   switch (`${method} ${segments[1] ?? ''}`) {
+    case 'GET health':
+      return json(res, 200, { ok: true, apiVersion: API_VERSION });
+
     case 'GET groups':
       return json(res, 200, deps.messages.listGroups());
 
