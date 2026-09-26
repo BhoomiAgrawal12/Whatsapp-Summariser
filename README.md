@@ -5,6 +5,10 @@ regular "linked device" (like WhatsApp Web), records your group messages locally
 produces AI digests delivered to your own **"Message Yourself" chat** — visible on your
 phone, tablet and laptop. Nobody in any group ever sees anything.
 
+> 👉 **New here? Start with [GETTING_STARTED.md](./GETTING_STARTED.md)** — a step-by-step
+> walkthrough for setting it up, trying every feature and verifying each one works.
+> This file is the reference: every command, every setting, full troubleshooting.
+
 > Full design, feasibility analysis and market comparison: [PLAN.md](./PLAN.md)
 > Developer/agent context: [CLAUDE.md](./CLAUDE.md)
 
@@ -34,8 +38,12 @@ Requirements: **Node.js ≥ 22**.
 ```bash
 npm install
 cp .env.example .env     # then edit: set OPENAI_API_KEY
+npm run check-env        # verify the config loaded (prints no secrets)
 npm run dev
 ```
+
+> Walkthrough with a verification checkpoint at every stage:
+> [GETTING_STARTED.md](./GETTING_STARTED.md).
 
 ### First run (pairing)
 
