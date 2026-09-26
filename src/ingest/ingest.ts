@@ -1,4 +1,4 @@
-import { proto, type WAMessage } from 'baileys';
+import { proto, type WAMessage, type WAMessageUpdate } from 'baileys';
 import { mkdirSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -20,7 +20,7 @@ const MEDIA_EXT: Record<string, string> = {
  * Turns raw Baileys events into database rows:
  *  - stores every group/chat message (text extracted, media protos kept)
  *  - applies edits and revokes
- *  - handles the user's own ⭐ reactions -> permanent starred archive
+ *  - archives the user's starred messages (WhatsApp's own star AND a ⭐ reaction)
  *  - routes "/command" texts from the self-chat to the command handler
  */
 export class Ingestor {
@@ -89,6 +89,10 @@ export class Ingestor {
           quotedId,
           raw,
         });
+        // Messages can arrive already starred — history sync replays stars set
+        // before this app existed, so the archive backfills instead of only ever
+        // seeing stars applied from now on.
+        if (msg.starred === true) await this.archive(chatJid, waId, 'already starred');
         return;
       }
       case 'edit':
@@ -112,6 +116,25 @@ export class Ingestor {
     }
   }
 
+  /**
+   * WhatsApp's own star (long-press → Star) syncs to linked devices as a
+   * `messages.update` carrying `starred`. Supporting it means the built-in
+   * gesture people already know works, alongside the ⭐ reaction.
+   */
+  async handleUpdates(updates: WAMessageUpdate[]): Promise<void> {
+    for (const { key, update } of updates) {
+      const chatJid = key?.remoteJid;
+      const waId = key?.id;
+      if (!chatJid || !waId || typeof update?.starred !== 'boolean') continue;
+      try {
+        if (update.starred) await this.archive(chatJid, waId, 'native star');
+        else this.starred.remove(chatJid, waId);
+      } catch (err) {
+        this.logger.error({ err, chatJid, waId }, 'failed to apply star update');
+      }
+    }
+  }
+
   private async handleOwnReaction(chatJid: string, targetId: string, emoji: string): Promise<void> {
     if (emoji === '') {
       // Reaction removed -> unstar (archive is otherwise permanent).
@@ -119,10 +142,14 @@ export class Ingestor {
       return;
     }
     if (!isStarEmoji(emoji)) return;
+    await this.archive(chatJid, targetId, '⭐ reaction');
+  }
 
+  /** Copy a recorded message (and its media) into the permanent archive. */
+  private async archive(chatJid: string, targetId: string, via: string): Promise<void> {
     const stored = this.messages.getByWaId(chatJid, targetId);
     if (!stored) {
-      this.logger.warn({ chatJid, targetId }, 'starred a message we never recorded');
+      this.logger.warn({ chatJid, targetId, via }, 'starred a message we never recorded');
       return;
     }
     const mediaPath = await this.tryDownloadMedia(chatJid, targetId, stored.kind);
@@ -137,7 +164,7 @@ export class Ingestor {
       kind: stored.kind,
       mediaPath,
     });
-    this.logger.info({ chatJid, targetId }, 'message starred into permanent archive');
+    this.logger.info({ chatJid, targetId, via }, 'message starred into permanent archive');
   }
 
   /** Returns a path relative to dataDir, or null when there is no media / download fails. */

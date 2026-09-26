@@ -7,6 +7,7 @@ import makeWASocket, {
   useMultiFileAuthState,
   proto,
   type WAMessage,
+  type WAMessageUpdate,
   type WAVersion,
 } from 'baileys';
 import type { Boom } from '@hapi/boom';
@@ -18,6 +19,11 @@ type WaSocket = ReturnType<typeof makeWASocket>;
 export interface WaHandlers {
   /** Live + history messages (deduplicated downstream by wa message id). */
   onMessages(messages: WAMessage[], source: 'live' | 'history'): Promise<void>;
+  /**
+   * Edits to messages already delivered. WhatsApp syncs the user's own
+   * star/unstar to linked devices through this event.
+   */
+  onMessageUpdates(updates: WAMessageUpdate[]): Promise<void>;
   /** Group jid -> subject, fetched after connecting. */
   onGroups(groups: Map<string, string>): void;
   /** Fired once per (re)connect when the socket is usable. */
@@ -115,6 +121,10 @@ export class WaConnection {
 
     sock.ev.on('messages.upsert', ({ messages }) => {
       void this.safely(() => this.handlers.onMessages(messages, 'live'), 'messages.upsert');
+    });
+
+    sock.ev.on('messages.update', (updates) => {
+      void this.safely(() => this.handlers.onMessageUpdates(updates), 'messages.update');
     });
 
     sock.ev.on('messaging-history.set', ({ messages, chats }) => {

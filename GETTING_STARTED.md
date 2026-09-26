@@ -311,7 +311,8 @@ or "nothing this time". Clear it with `/topics clear`.
 
 **⭐ Star-to-archive** — survives the group being cleared or deleted:
 
-1. React with ⭐ (also 🌟 ✨ 💫) to any message in any chat, from your phone.
+1. Either **long-press a message → Star** (WhatsApp's own star), or **react with ⭐**
+   (also 🌟 ✨ 💫). Both archive it.
 2. ✅ It appears in the dashboard's **Starred** tab within seconds. Images render inline;
    other media gets a download link. Verify with
    `sqlite3 -readonly data/app.db "select count(*) from starred_archive;"`

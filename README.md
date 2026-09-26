@@ -25,7 +25,7 @@ phone, tablet and laptop. Nobody in any group ever sees anything.
 - 🗓 **Date-wise digests** — a window covering several days is summarized *day by day*, not blurred together
 - 🧵 **Topic digests** — overview, per-topic threads, decisions/action items, with `[n]` citations
 - 🎯 **Personal topic profile** — "tech talks, event updates, sticker packs" → dedicated section per digest, changeable anytime
-- ⭐ **Permanent star archive** — react ⭐ to any message; it's copied (incl. media) into your own DB and survives chat clearing
+- ⭐ **Permanent star archive** — star a message in WhatsApp (or react ⭐); it's copied (incl. media) into your own DB and survives chat clearing
 - 💾 **Saved summaries** — every digest is stored; every `[n]` citation resolves to the exact
   message — full context in the dashboard, and one click into WhatsApp Web via the companion extension
 - ⏰ **Daily digests** — per group at a time you pick
@@ -81,8 +81,17 @@ Every reply states the range it actually used, so you always see what was summar
 window can't be read it is reported — it is never silently treated as part of the group name.
 A group whose own name looks like a date can be quoted: `/sum "Batch 2025-26"`.
 
-**⭐ Star-to-archive:** react with ⭐ (or 🌟/✨) to any message in any chat — it is
-permanently archived (media downloaded too). Remove the reaction to un-archive.
+**⭐ Star-to-archive — two ways, both work:**
+
+1. **WhatsApp's own star** (the normal one): long-press a message → **Star**. On desktop,
+   hover → menu → **Star**. WhatsApp syncs this to linked devices, so it archives here too.
+2. **React with ⭐** (also 🌟 ✨ 💫) — useful when you want the archive without cluttering
+   your WhatsApp Starred list.
+
+Either way the message is copied into your own database with its media downloaded, so it
+survives the chat being cleared, the group being deleted, or the sender removing it.
+Un-star (or remove the reaction) to drop it from the archive. Messages that were **already
+starred** before you set this up are archived as WhatsApp syncs your history.
 
 ## Using it — dashboard
 

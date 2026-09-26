@@ -109,8 +109,11 @@ deploy/             # Oracle Cloud deployment: oracle-setup.sh (server bootstrap
 - **"Unread" = catch-up marker**, not WhatsApp's real read state (unreliable via
   linked device): each `/unread` summarizes since the last catch-up and advances the
   per-chat marker (`markers` in settings repo).
-- **Star-to-archive:** a ⭐ (or any star-emoji) reaction *by the user* on any message
-  copies it (+ downloaded media) into `starred_archive` — survives WhatsApp chat clears.
+- **Star-to-archive** has two triggers, both funnelling into `Ingestor.archive()`:
+  WhatsApp's *native* star (synced to linked devices as a `messages.update` carrying
+  `starred`, handled in `handleUpdates`) and a ⭐-emoji *reaction* by the user. Messages that
+  arrive already starred (history sync) are archived on insert, so pre-existing stars
+  backfill. Copies the message + downloaded media into `starred_archive`, surviving chat clears.
 - **No per-message deep links** exist on WhatsApp mobile — digests cite messages as
   `sender HH:MM`, plus a `<PUBLIC_URL>/m/<id>` link when `PUBLIC_URL` is set, which opens
   the dashboard's context view for that exact message.

@@ -45,6 +45,7 @@ async function main(): Promise<void> {
 
   const conn = new WaConnection(config.authDir, logger, {
     onMessages: async (batch, source) => ingestor.handleMessages(batch, source),
+    onMessageUpdates: async (updates) => ingestor.handleUpdates(updates),
     onGroups: (groups) => ingestor.registerGroups(groups),
     onReady: async () => {
       logger.info('ready — send /help to yourself in WhatsApp (Message Yourself chat)');
