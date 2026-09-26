@@ -75,6 +75,13 @@
   .toolbar .count { flex-basis: 100%; }
   input[type="search"]::-webkit-search-cancel-button { filter: invert(0.6); }
   mark { background: var(--accent2); color: var(--text); border-radius: 3px; padding: 0 2px; }
+  .section-heading { color: var(--muted); font-size: 12px; font-weight: 600; letter-spacing: .06em;
+                     text-transform: uppercase; margin: 16px 2px 6px; }
+  .section-heading:first-child { margin-top: 0; }
+  /* Fades the tail of a long digest instead of cutting it mid-line. */
+  .digest.clipped { max-height: 190px; overflow: hidden;
+                    -webkit-mask-image: linear-gradient(#000 60%, transparent);
+                    mask-image: linear-gradient(#000 60%, transparent); }
   .spin { display: inline-block; animation: r 1s linear infinite; }
   @keyframes r { to { transform: rotate(360deg); } }
 </style>
@@ -192,13 +199,27 @@ function wireCitations(root) {
   }));
 }
 
-function summaryCard(s) {
+/** Digests longer than this are collapsed so a list of them stays scannable. */
+const DIGEST_COLLAPSE_CHARS = 700;
+
+function summaryCard(s, needle) {
   const div = document.createElement('div');
   div.className = 'card';
+  const long = (s.content || '').length > DIGEST_COLLAPSE_CHARS;
   div.innerHTML = `
-    <h3>${esc(s.chatName)} <span class="muted">#${s.id}</span></h3>
+    <h3>${highlight(s.chatName, needle)} <span class="muted">#${s.id}</span></h3>
     <div class="muted">${fmt(s.fromTs)} → ${fmt(s.toTs)} · ${s.messageCount} messages · created ${fmt(s.createdAt)}</div>
-    <div class="digest" style="margin-top:8px">${digestHtml(s.content, s.citations, s.chatName)}</div>`;
+    <div class="digest${long ? ' clipped' : ''}" style="margin-top:8px">${digestHtml(s.content, s.citations, s.chatName)}</div>
+    ${long ? '<button class="ghost expand">Show more ▾</button>' : ''}`;
+
+  if (long) {
+    const body = div.querySelector('.digest');
+    const button = div.querySelector('.expand');
+    button.addEventListener('click', () => {
+      const clipped = body.classList.toggle('clipped');
+      button.textContent = clipped ? 'Show more ▾' : 'Show less ▴';
+    });
+  }
   wireCitations(div);
   return div;
 }
@@ -314,7 +335,20 @@ function filterableList(o) {
 
     const shown = matched.slice(0, LIST_LIMIT);
     list.innerHTML = '';
-    for (const item of shown) list.appendChild(o.renderItem(item, needle));
+    // Optional section headings (e.g. group results by day). A heading is
+    // emitted whenever the caller's label changes between consecutive rows.
+    let lastHeading = null;
+    for (const item of shown) {
+      const heading = o.groupHeading?.(item, state.sort) ?? null;
+      if (heading !== null && heading !== lastHeading) {
+        const h = document.createElement('div');
+        h.className = 'section-heading';
+        h.textContent = heading;
+        list.appendChild(h);
+        lastHeading = heading;
+      }
+      list.appendChild(o.renderItem(item, needle));
+    }
 
     if (matched.length === 0) {
       list.innerHTML = `<div class="empty">Nothing matches “${esc(state.query.trim())}”.</div>`;
@@ -449,10 +483,44 @@ function groupCard(g, needle) {
 }
 
 async function renderSummaries() {
-  const list = await api('/api/summaries?limit=50');
-  $view.innerHTML = '';
-  if (!list.length) { $view.innerHTML = '<div class="empty">No saved summaries yet.</div>'; return; }
-  list.forEach((s) => $view.appendChild(summaryCard(s)));
+  const list = await api('/api/summaries?limit=300');
+  filterableList({
+    items: list,
+    key: 'summaries',
+    placeholder: 'Search summaries — group name or anything in the text…',
+    noun: 'summaries',
+    emptyText: 'No saved summaries yet. Every /sum result is saved automatically.',
+    // Searching the digest body too makes this a way to find "what was said
+    // about X", not merely a group picker.
+    searchText: (s) => `${s.chatName} ${s.content}`,
+    sorts: [
+      ['newest', 'Newest first', (a, b) => b.createdAt - a.createdAt],
+      ['oldest', 'Oldest first', (a, b) => a.createdAt - b.createdAt],
+      ['covered', 'Period covered (latest)', (a, b) => b.fromTs - a.fromTs],
+      ['group', 'Group name (A–Z)', (a, b) => a.chatName.localeCompare(b.chatName) || b.createdAt - a.createdAt],
+      ['size', 'Most messages', (a, b) => b.messageCount - a.messageCount],
+    ],
+    // Date-wise arrangement: day headings when ordered by time, group headings
+    // when ordered by group.
+    groupHeading: (s, sort) => {
+      if (sort === 'group') return s.chatName || s.chatJid;
+      if (sort === 'newest' || sort === 'oldest') return dayLabel(s.createdAt);
+      if (sort === 'covered') return dayLabel(s.fromTs);
+      return null;
+    },
+    renderItem: (s, needle) => summaryCard(s, needle),
+  });
+}
+
+/** "Today" / "Yesterday" / "24 Sep 2026" for a section heading. */
+function dayLabel(ts) {
+  if (!ts) return 'Unknown date';
+  const day = new Date(ts); day.setHours(0, 0, 0, 0);
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const diff = Math.round((today - day) / 86400000);
+  if (diff === 0) return 'Today';
+  if (diff === 1) return 'Yesterday';
+  return new Date(ts).toLocaleDateString([], { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
 async function renderStarred() {
