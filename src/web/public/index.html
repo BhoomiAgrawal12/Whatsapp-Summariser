@@ -78,6 +78,12 @@
   .section-heading { color: var(--muted); font-size: 12px; font-weight: 600; letter-spacing: .06em;
                      text-transform: uppercase; margin: 16px 2px 6px; }
   .section-heading:first-child { margin-top: 0; }
+  .sched-row { border-bottom: 1px solid #1c2a33; padding-bottom: 8px; }
+  .sched-name { flex: 1 1 180px; min-width: 0; overflow: hidden; text-overflow: ellipsis;
+                white-space: nowrap; }
+  /* Inside a card the toolbar must not stick to the viewport, or it floats over
+     the card's own heading while scrolling. */
+  .card .toolbar { position: static; padding-top: 4px; }
   /* Fades the tail of a long digest instead of cutting it mid-line. */
   .digest.clipped { max-height: 190px; overflow: hidden;
                     -webkit-mask-image: linear-gradient(#000 60%, transparent);
@@ -296,9 +302,12 @@ const filterState = {};
  * @param {string}   o.noun         plural noun for the count ("groups", "summaries")
  */
 function filterableList(o) {
-  $view.innerHTML = '';
+  // Defaults to the whole view; `mount` lets a tab embed a filtered list inside
+  // a card alongside other content (Topics & Schedules does this).
+  const root = o.mount || $view;
+  root.innerHTML = '';
   if (!o.items.length) {
-    $view.innerHTML = `<div class="empty">${esc(o.emptyText)}</div>`;
+    root.innerHTML = `<div class="empty">${esc(o.emptyText)}</div>`;
     return;
   }
 
@@ -315,7 +324,7 @@ function filterableList(o) {
     <span class="muted count"></span>`;
 
   const list = document.createElement('div');
-  $view.append(bar, list);
+  root.append(bar, list);
 
   const $search = bar.querySelector('.search');
   const $sort = bar.querySelector('.sort');
@@ -512,6 +521,46 @@ async function renderSummaries() {
   });
 }
 
+/** One group's daily-digest row, with immediate feedback on save. */
+function scheduleRow(group, time, needle) {
+  const row = document.createElement('div');
+  row.className = 'row sched-row';
+  row.innerHTML = `
+    <span class="sched-name">${time ? '⏰ ' : ''}${highlight(group.name || group.jid, needle)}</span>
+    <input type="time" value="${esc(time)}">
+    <button class="ghost set">Set</button>
+    <button class="ghost off">Off</button>
+    <span class="muted status"></span>`;
+
+  const $time = row.querySelector('input');
+  const $status = row.querySelector('.status');
+  const save = async (value) => {
+    $status.textContent = '…';
+    try {
+      await api('/api/schedules', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ chatJid: group.jid, time: value }),
+      });
+      // Previously this fired and said nothing, so there was no way to tell a
+      // saved schedule from a mis-click.
+      $status.textContent = value ? `✓ daily at ${value}` : '✓ off';
+    } catch (err) {
+      $status.textContent = '❌ ' + err.message;
+    }
+  };
+
+  row.querySelector('.set').addEventListener('click', () => {
+    if (!$time.value) { $status.textContent = 'Pick a time first.'; return; }
+    void save($time.value);
+  });
+  row.querySelector('.off').addEventListener('click', () => {
+    $time.value = '';
+    void save(null);
+  });
+  return row;
+}
+
 /** "Today" / "Yesterday" / "24 Sep 2026" for a section heading. */
 function dayLabel(ts) {
   if (!ts) return 'Unknown date';
@@ -572,27 +621,29 @@ async function renderSettings() {
   sched.className = 'card';
   const byJid = Object.fromEntries(schedules.map((s) => [s.chatJid, s.time]));
   sched.innerHTML = `<h3>⏰ Daily digests</h3>
-    <div class="muted">Delivered to your "Message Yourself" chat at the given time.</div>` +
-    groups.map((g) => `
-      <div class="row" data-jid="${esc(g.jid)}">
-        <span style="flex:1">${esc(g.name || g.jid)}</span>
-        <input type="time" value="${byJid[g.jid] || ''}">
-        <button class="ghost set">Set</button>
-        <button class="ghost off">Off</button>
-      </div>`).join('');
-  sched.querySelectorAll('.row[data-jid]').forEach((row) => {
-    const jid = row.dataset.jid;
-    row.querySelector('.set').addEventListener('click', async () => {
-      const time = row.querySelector('input').value;
-      if (time) await api('/api/schedules', { method: 'POST',
-        headers: { 'content-type': 'application/json' }, body: JSON.stringify({ chatJid: jid, time }) });
-    });
-    row.querySelector('.off').addEventListener('click', async () => {
-      row.querySelector('input').value = '';
-      await api('/api/schedules', { method: 'POST',
-        headers: { 'content-type': 'application/json' }, body: JSON.stringify({ chatJid: jid, time: null }) });
-    });
+    <div class="muted">Delivered to your "Message Yourself" chat at the given time.</div>
+    <div class="sched-list"></div>`;
+
+  filterableList({
+    mount: sched.querySelector('.sched-list'),
+    items: groups,
+    key: 'schedules',
+    placeholder: 'Search groups to schedule…',
+    noun: 'groups',
+    emptyText: 'No groups recorded yet.',
+    searchText: (g) => g.name || g.jid,
+    sorts: [
+      // Groups that already have a digest come first: the common task here is
+      // reviewing or turning off an existing schedule, not adding the 400th.
+      ['scheduled', 'Scheduled first', (a, b) =>
+        Number(Boolean(byJid[b.jid])) - Number(Boolean(byJid[a.jid])) ||
+        (b.lastMessageTs || 0) - (a.lastMessageTs || 0)],
+      ['recent', 'Most recent activity', (a, b) => (b.lastMessageTs || 0) - (a.lastMessageTs || 0)],
+      ['name', 'Name (A–Z)', (a, b) => (a.name || a.jid).localeCompare(b.name || b.jid)],
+    ],
+    renderItem: (g, needle) => scheduleRow(g, byJid[g.jid] || '', needle),
   });
+
   $view.appendChild(sched);
 }
 
