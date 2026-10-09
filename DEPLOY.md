@@ -99,9 +99,32 @@ The dashboard stays private on the server. Two options:
   ssh -L 8790:localhost:8790 ubuntu@<SERVER-IP>
   ```
   …then open http://localhost:8790 while the tunnel is up.
-- **Tailscale (nicer, free, works from your phone too):** install Tailscale on the
-  server and your devices, then open `http://<server-tailscale-name>:8790` from
-  anywhere. No ports exposed to the internet either way.
+- **Tailscale (nicer, free, works from your phone too):**
+  ```bash
+  ssh <server> 'curl -fsSL https://tailscale.com/install.sh | sudo sh'
+  # run the login detached, or it dies with the SSH session before you can approve it:
+  ssh <server> 'sudo systemd-run --unit=ts-login --collect --service-type=oneshot \
+      tailscale up --hostname=wa-summarizer --accept-routes=false'
+  ssh <server> 'tailscale status'        # shows the URL to open, then the joined devices
+  ```
+  Install the Tailscale app on your phone, sign in with **the same account**, then open
+  `http://<magicdns-name>:8790` from anywhere. Nothing is exposed to the internet: the
+  MagicDNS name only resolves inside your tailnet and no port is opened.
+
+  Sign in with a **personal** account (`@gmail.com`), not a work domain — Tailscale puts
+  everyone sharing a custom domain into the same tailnet automatically, and the dashboard
+  has no login of its own.
+
+  Then point citations at it so they are tappable from the phone:
+  ```bash
+  scp deploy/set-public-url.sh <server>: && ssh <server> 'bash set-public-url.sh http://<magicdns-name>:8790'
+  ssh <server> 'pm2 restart wa-summarizer'
+  ```
+  Finally, **disable key expiry** for the server in the Tailscale admin console — otherwise
+  it silently drops off the tailnet after ~6 months and the links stop working.
+
+  Tailscale does not change the server's default route (only `100.64.0.0/10` goes over
+  `tailscale0`), so the WhatsApp connection keeps using the normal interface and public IP.
 
 ## Ongoing
 
