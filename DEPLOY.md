@@ -122,8 +122,20 @@ The dashboard stays private on the server. Two options:
   E2.1.Micro (x86) afterwards does *not* reset it. Fix: set the **shape first**, then
   click **Change image** and re-pick Ubuntu 24.04 — the console then offers the
   **x86_64** build. The rule is shape → image, never the other way round.
-- **`better-sqlite3` build errors** — `oracle-setup.sh` installs build-essential;
-  re-run it, then `./deploy/deploy.sh` again (it compiles on the server via `npm ci`).
+- **`better-sqlite3` build errors** — `oracle-setup.sh` installs build-essential and, on a
+  1 GB VM, 2 GB of swap (node-gyp is OOM-killed without it). Re-run it, then
+  `./deploy/deploy.sh` again (it compiles on the server via `npm ci`).
+- **`deploy.sh` can't connect / permission denied** — it calls plain `ssh`, so the key must
+  be discoverable. Add it to `~/.ssh/config`:
+  ```
+  Host wa-server <SERVER-IP>
+    HostName <SERVER-IP>
+    User ubuntu
+    IdentityFile ~/.ssh/oracle-wa.key
+    IdentitiesOnly yes
+  ```
+- **Ephemeral public IP changed after a stop/start** — Oracle ephemeral IPs are not stable.
+  Reserve it (VNIC → IP administration → edit → Reserved) or update `~/.ssh/config`.
 - **Logged out after moving state** — if WhatsApp rejected the moved session, delete
   `auth/` on the server and pair fresh (`pm2 logs` shows the QR).
 - **Oracle reclaiming idle VMs** — Oracle may reclaim *idle* Always Free instances;
