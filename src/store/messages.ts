@@ -44,6 +44,18 @@ export interface NewMessage {
   raw: Buffer | null;
 }
 
+/**
+ * Every column except `raw`.
+ *
+ * `raw` holds the encoded proto of media messages (~19 MB across a busy account)
+ * and is only ever needed by `getRaw` when downloading media for the archive —
+ * `toMessage` does not even map it. `SELECT *` therefore read and deserialized
+ * megabytes of blobs on every summarize and every context lookup for nothing,
+ * which is pure waste on a small always-free VM.
+ */
+const COLUMNS = `id, chat_jid, wa_message_id, sender_jid, sender_name, timestamp,
+                 text, kind, quoted_id, deleted, edited`;
+
 export class MessageRepo {
   constructor(private readonly db: Db) {}
 
@@ -83,13 +95,13 @@ export class MessageRepo {
 
   getByWaId(chatJid: string, waMessageId: string): StoredMessage | null {
     const row = this.db
-      .prepare('SELECT * FROM messages WHERE chat_jid = ? AND wa_message_id = ?')
+      .prepare(`SELECT ${COLUMNS} FROM messages WHERE chat_jid = ? AND wa_message_id = ?`)
       .get(chatJid, waMessageId) as MessageRow | undefined;
     return row ? toMessage(row) : null;
   }
 
   getById(id: number): StoredMessage | null {
-    const row = this.db.prepare('SELECT * FROM messages WHERE id = ?').get(id) as
+    const row = this.db.prepare(`SELECT ${COLUMNS} FROM messages WHERE id = ?`).get(id) as
       | MessageRow
       | undefined;
     return row ? toMessage(row) : null;
@@ -99,7 +111,7 @@ export class MessageRepo {
   inRange(chatJid: string, fromTs: number, toTs: number): StoredMessage[] {
     const rows = this.db
       .prepare(
-        `SELECT * FROM messages
+        `SELECT ${COLUMNS} FROM messages
          WHERE chat_jid = ? AND timestamp >= ? AND timestamp <= ? AND deleted = 0
          ORDER BY timestamp ASC, id ASC`
       )
@@ -114,11 +126,11 @@ export class MessageRepo {
     const rows = this.db
       .prepare(
         `SELECT * FROM (
-           SELECT * FROM messages WHERE chat_jid = @chatJid AND id <= @id ORDER BY id DESC LIMIT @take
+           SELECT ${COLUMNS} FROM messages WHERE chat_jid = @chatJid AND id <= @id ORDER BY id DESC LIMIT @take
          )
          UNION
          SELECT * FROM (
-           SELECT * FROM messages WHERE chat_jid = @chatJid AND id > @id ORDER BY id ASC LIMIT @take
+           SELECT ${COLUMNS} FROM messages WHERE chat_jid = @chatJid AND id > @id ORDER BY id ASC LIMIT @take
          )
          ORDER BY timestamp ASC, id ASC`
       )
